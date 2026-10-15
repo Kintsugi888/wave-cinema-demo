@@ -469,7 +469,8 @@ def dashboard(request: Request, request_error: Optional[str] = Query(None, alias
 
 
 @app.post("/projects")
-def create_project(request: Request, name: str = Form(...)):
+def create_project(request: Request, name: str = Form(...),
+                   aspect: str = Form("16:9")):
     user = require_user(request)
     name = (name or "").strip()[:120] or "Untitled film"
     ok, res = bcall(backend.create_project, name)
@@ -479,6 +480,8 @@ def create_project(request: Request, name: str = Form(...)):
     if not pid:
         return RedirectResponse(f"/?err={_q('create_project returned no project id')}", status_code=303)
     registry_add(str(pid), name, user["id"])
+    # Apply the chosen aspect ratio (defaults to 16:9 on any failure).
+    bcall(backend.set_aspect_ratio, str(pid), aspect or "16:9")
     return RedirectResponse(f"/project/{pid}", status_code=303)
 
 
@@ -614,6 +617,19 @@ def cast_view(pid: str, p: dict) -> list:
 
 
 @app.get("/project/{pid}", response_class=HTMLResponse)
+def _check_owner(pid: str, p: dict, user: dict) -> Optional[str]:
+    """Return an error message if the user may not access this project."""
+    owner_id = p.get("owner_id") if isinstance(p, dict) else None
+    if owner_id is None:
+        for item in registry_list():
+            if item.get("id") == pid:
+                owner_id = item.get("owner_id")
+                break
+    if owner_id and owner_id != user["id"]:
+        return "Project not found"
+    return None
+
+
 def project_page(request: Request,
                  pid: str,
                  stage: Optional[str] = Query(None),
@@ -628,13 +644,8 @@ def project_page(request: Request,
             status_code=404)
     # Ownership check: users can only see their own projects.
     # Legacy projects without owner_id are visible to all signed-in users.
-    owner_id = p.get("owner_id") if isinstance(p, dict) else None
-    if owner_id is None:
-        for item in registry_list():
-            if item.get("id") == pid:
-                owner_id = item.get("owner_id")
-                break
-    if owner_id and owner_id != user["id"]:
+    owner_err = _check_owner(pid, p, user)
+    if owner_err:
         return RedirectResponse("/?err=Project+not+found", status_code=303)
     active = stage if stage in STAGE_KEYS else detect_stage(p)
     order = {k: i for i, k in enumerate(STAGE_KEYS)}
@@ -649,6 +660,13 @@ def project_page(request: Request,
     if not auto.get("ok"):
         # Keep the technical reason out of the UI; users just need the gist.
         auto = {**auto, "reason": "coming soon. DIY Clips works right now"}
+    ok_ro, ro = bcall(backend.get_render_opts, pid)
+    render_opts = ro if ok_ro and isinstance(ro, dict) else {
+        "aspect_ratio": "16:9", "resolution": "1080p"}
+    ok_ar, ar_list = bcall(backend.aspect_ratios)
+    aspects = ar_list if ok_ar and isinstance(ar_list, list) else ["16:9"]
+    ok_rs, rs_list = bcall(backend.resolutions)
+    resolutions = rs_list if ok_rs and isinstance(rs_list, list) else ["1080p"]
     return templates.TemplateResponse(request, "project.html", ctx(request,
         error=err,
         nav_active="create",
@@ -667,6 +685,10 @@ def project_page(request: Request,
         ready_to_assemble=ready_to_assemble(p),
         assemble_status=status if active == "export" else None,
         notice=status if active != "export" else None,
+        aspect_ratio=render_opts.get("aspect_ratio", "16:9"),
+        resolution=render_opts.get("resolution", "1080p"),
+        aspect_ratios=aspects,
+        resolutions=resolutions,
     ))
 
 
@@ -1023,6 +1045,205 @@ def studio_save_prompt(request: Request, pid: str, sid: str,
             f"/studio/{pid}?err={_q(res)}#scene-{sid}", status_code=303)
     return RedirectResponse(
         f"/studio/{pid}?status={_q('Prompt saved.')}#scene-{sid}",
+        status_code=303)
+
+
+# ------------------------------------------------- Producer (AI directing partner)
+
+@app.get("/project/{pid}/producer", response_class=HTMLResponse)
+def producer_page(request: Request, pid: str,
+                  err: Optional[str] = Query(None)):
+    user = require_user(request)
+    ok, p, perr = project_of(pid)
+    if not ok:
+        return RedirectResponse(f"/?err={_q(perr or 'Project not found')}",
+                                status_code=303)
+    owner_err = _check_owner(pid, p, user)
+    if owner_err:
+        return RedirectResponse("/?err=Project+not+found", status_code=303)
+    ok_h, history = bcall(backend.producer_history, pid)
+    return templates.TemplateResponse(request, "producer.html", ctx(
+        request, error=err, nav_active="create",
+        project={"id": pid, "name": _g(p, "name", default=pid)},
+        history=history if ok_h and isinstance(history, list) else [],
+    ))
+
+
+@app.post("/project/{pid}/producer/chat")
+async def producer_chat_api(request: Request, pid: str):
+    user = require_user(request)
+    ok, p, _ = project_of(pid)
+    if not ok or _check_owner(pid, p or {}, user):
+        return JSONResponse({"error": "Project not found"}, status_code=404)
+    try:
+        body = await request.json()
+    except Exception:
+        return JSONResponse({"error": "Send JSON {message}"}, status_code=400)
+    message = (body.get("message") or "").strip()
+    if not message:
+        return JSONResponse({"error": "Message is empty"}, status_code=400)
+    ok_c, res = bcall(backend.producer_chat, pid, message)
+    if not ok_c:
+        return JSONResponse({"error": str(res)[:500]}, status_code=500)
+    return JSONResponse({"reply": res.get("reply", ""),
+                         "source": res.get("source", "")})
+
+
+# ------------------------------------------------- Captions (word timing + SRT)
+
+@app.get("/project/{pid}/captions", response_class=HTMLResponse)
+def captions_page(request: Request, pid: str,
+                  err: Optional[str] = Query(None)):
+    user = require_user(request)
+    ok, p, perr = project_of(pid)
+    if not ok:
+        return RedirectResponse(f"/?err={_q(perr or 'Project not found')}",
+                                status_code=303)
+    owner_err = _check_owner(pid, p, user)
+    if owner_err:
+        return RedirectResponse("/?err=Project+not+found", status_code=303)
+    ok_c, caps = bcall(backend.captions, pid)
+    if not ok_c:
+        return templates.TemplateResponse(request, "captions.html", ctx(
+            request, error=str(caps)[:500], nav_active="create",
+            project={"id": pid, "name": _g(p, "name", default=pid)},
+            captions=None,
+        ))
+    return templates.TemplateResponse(request, "captions.html", ctx(
+        request, error=err, nav_active="create",
+        project={"id": pid, "name": _g(p, "name", default=pid)},
+        captions=caps,
+    ))
+
+
+@app.get("/project/{pid}/captions.srt")
+def captions_srt_download(request: Request, pid: str):
+    user = require_user(request)
+    ok, p, _ = project_of(pid)
+    if not ok or _check_owner(pid, p or {}, user):
+        return HTMLResponse("not found", status_code=404)
+    ok_c, srt = bcall(backend.captions_srt, pid)
+    if not ok_c:
+        return HTMLResponse(str(srt)[:500], status_code=400)
+    return HTMLResponse(str(srt), media_type="text/plain",
+                        headers={"Content-Disposition":
+                                 f"attachment; filename=captions-{pid}.srt"})
+
+
+# ------------------------------------------------- Remix (video-to-video)
+
+MAX_REMIX_UPLOAD_BYTES = 100 * 1024 * 1024
+REMIX_EXTS = {".mp4", ".mov"}
+
+
+def _remix_view(pid: str, r: dict) -> dict:
+    return {
+        "remix_id": r.get("remix_id", ""),
+        "style_prompt": r.get("style_prompt", ""),
+        "status": r.get("status", ""),
+        "error": r.get("error"),
+        "source_url": media_url(r.get("source_path"), pid),
+        "result_url": media_url(r.get("result_path"), pid),
+        "created_at": str(r.get("created_at", ""))[:16].replace("T", " "),
+    }
+
+
+@app.get("/project/{pid}/remix", response_class=HTMLResponse)
+def remix_page(request: Request, pid: str,
+               err: Optional[str] = Query(None),
+               status: Optional[str] = Query(None)):
+    user = require_user(request)
+    ok, p, perr = project_of(pid)
+    if not ok:
+        return RedirectResponse(f"/?err={_q(perr or 'Project not found')}",
+                                status_code=303)
+    owner_err = _check_owner(pid, p, user)
+    if owner_err:
+        return RedirectResponse("/?err=Project+not+found", status_code=303)
+    ok_r, remixes = bcall(backend.remix_list, pid)
+    views = [_remix_view(pid, r) for r in remixes] if ok_r and isinstance(remixes, list) else []
+    return templates.TemplateResponse(request, "remix.html", ctx(
+        request, error=err, notice=status, nav_active="create",
+        project={"id": pid, "name": _g(p, "name", default=pid)},
+        remixes=views,
+    ))
+
+
+@app.post("/project/{pid}/remix")
+async def remix_submit(request: Request, pid: str,
+                       video: UploadFile = File(...),
+                       style_prompt: str = Form("")):
+    user = require_user(request)
+    ok, p, _ = project_of(pid)
+    if not ok or _check_owner(pid, p or {}, user):
+        return RedirectResponse("/?err=Project+not+found", status_code=303)
+    ext = Path(video.filename or "").suffix.lower()
+    if ext not in REMIX_EXTS:
+        return RedirectResponse(
+            f"/project/{pid}/remix?err={_q('Remix source must be MP4 or MOV.')}",
+            status_code=303)
+    data = await video.read()
+    if len(data) > MAX_REMIX_UPLOAD_BYTES:
+        return RedirectResponse(
+            f"/project/{pid}/remix?err={_q('That video is over 100 MB.')}",
+            status_code=303)
+    ok_s, res = bcall(backend.remix_submit, pid, data,
+                      video.filename or "clip.mp4", style_prompt)
+    if not ok_s:
+        return RedirectResponse(
+            f"/project/{pid}/remix?err={_q(res)}", status_code=303)
+    rid = res.get("remix_id", "") if isinstance(res, dict) else ""
+    # Run immediately on the project's lane (mock/byok/cloud).
+    # BYO lane: stays queued for the DIY job pack.
+    lane = (res.get("lane") if isinstance(res, dict) else "byo") or "byo"
+    if lane == "byo":
+        return RedirectResponse(
+            f"/project/{pid}/remix?status={_q('Remix queued — it is in your DIY job pack. Generate it on your own account and upload the result.')}",
+            status_code=303)
+    ok_r, run_res = bcall(backend.remix_run, pid, rid)
+    if not ok_r:
+        return RedirectResponse(
+            f"/project/{pid}/remix?err={_q(f'Remix queued but generation failed: {run_res}')}",
+            status_code=303)
+    return RedirectResponse(
+        f"/project/{pid}/remix?status={_q('Remix complete — compare it with the original below.')}",
+        status_code=303)
+
+
+@app.post("/project/{pid}/remix/{rid}/run")
+def remix_run(request: Request, pid: str, rid: str):
+    require_user(request)
+    ok, res = bcall(backend.remix_run, pid, rid)
+    if not ok:
+        return RedirectResponse(
+            f"/project/{pid}/remix?err={_q(res)}", status_code=303)
+    return RedirectResponse(
+        f"/project/{pid}/remix?status={_q('Remix complete.')}", status_code=303)
+
+
+# ------------------------------------------------- Render options (aspect + resolution)
+
+@app.post("/project/{pid}/aspect")
+def set_aspect(request: Request, pid: str, aspect: str = Form(...)):
+    require_user(request)
+    ok, res = bcall(backend.set_aspect_ratio, pid, aspect)
+    if not ok:
+        return RedirectResponse(f"/project/{pid}?err={_q(res)}", status_code=303)
+    return RedirectResponse(
+        f"/project/{pid}?status={_q(f'Aspect ratio set to {aspect}. New generations will use it.')}",
+        status_code=303)
+
+
+@app.post("/project/{pid}/resolution")
+def set_resolution(request: Request, pid: str, resolution: str = Form(...)):
+    require_user(request)
+    ok, res = bcall(backend.set_resolution, pid, resolution)
+    if not ok:
+        return RedirectResponse(f"/project/{pid}?err={_q(res)}", status_code=303)
+    note = ("2K costs 1.5x the 1080p credit rate." if resolution == "2K"
+            else "Back to the standard 1080p rate.")
+    return RedirectResponse(
+        f"/project/{pid}?status={_q(f'Resolution set to {resolution}. {note}')}",
         status_code=303)
 
 

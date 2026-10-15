@@ -1,0 +1,48 @@
+{% extends "base.html" %}
+{% block title %}Captions · {{ project.name }}{% endblock %}
+{% block content %}
+<p><a href="/project/{{ project.id }}">&larr; {{ project.name }}</a></p>
+<h1>Timed Captions</h1>
+<p class="subtle">Word-level timing from the transcription, grouped into caption cues.</p>
+
+{% if captions %}
+<div class="panel">
+  <p>
+    <strong>{{ captions.cue_count }}</strong> cues
+    · <strong>{{ captions.word_count }}</strong> words
+    · source: <span class="mono">{{ captions.generated_by }}</span>
+    {% if captions.estimated %}
+    <br><span class="warn">Timing is estimated (no word-level transcription available for this project).</span>
+    {% endif %}
+  </p>
+  <p><a class="btn primary" href="/project/{{ project.id }}/captions.srt">Download .srt</a></p>
+</div>
+
+<div class="panel">
+  <table class="cap-table">
+    <thead><tr><th>#</th><th>Time</th><th>Caption</th></tr></thead>
+    <tbody>
+      {% for c in captions.cues %}
+      <tr>
+        <td class="mono">{{ c.n }}</td>
+        <td class="mono">{{ c.start_ms }}–{{ c.end_ms }}ms</td>
+        <td>{{ c.text }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% else %}
+<div class="panel">
+  <p class="subtle">No captions yet — transcribe the song first (Direct stage → "Build my game plan").</p>
+</div>
+{% endif %}
+
+<style>
+.cap-table{width:100%;border-collapse:collapse;font-size:14px}
+.cap-table th{text-align:left;color:#8fa1bd;font-weight:600;padding:8px;border-bottom:1px solid #1c2942}
+.cap-table td{padding:8px;border-bottom:1px solid #101a30;color:#C5D0E0}
+.cap-table .mono{font-family:monospace;color:#8fa1bd;white-space:nowrap}
+.warn{color:#E63946;font-weight:600}
+</style>
+{% endblock %}

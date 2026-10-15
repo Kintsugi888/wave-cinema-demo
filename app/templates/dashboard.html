@@ -34,6 +34,15 @@
     <label class="field" for="name">Film name</label>
     <input type="text" id="name" name="name" placeholder="e.g. Midnight Drive (official video)" required maxlength="120"
       {% if not backend_ok %}disabled{% endif %}>
+    <label class="field" for="aspect">Aspect ratio</label>
+    <select id="aspect" name="aspect" {% if not backend_ok %}disabled{% endif %}>
+      <option value="16:9" selected>16:9 — Cinema widescreen</option>
+      <option value="9:16">9:16 — Vertical (Shorts / Reels / TikTok)</option>
+      <option value="1:1">1:1 — Square (feed posts)</option>
+      <option value="21:9">21:9 — Ultrawide</option>
+      <option value="4:3">4:3 — Classic</option>
+      <option value="3:4">3:4 — Portrait</option>
+    </select>
     <p class="hint">One film, one project. {% if not backend_ok %}Disabled until the backend lands.{% endif %}</p>
     <p><input type="submit" class="primary" value="Create film" {% if not backend_ok %}disabled{% endif %}></p>
   </form>

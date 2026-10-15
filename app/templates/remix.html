@@ -1,0 +1,63 @@
+{% extends "base.html" %}
+{% block title %}Remix · {{ project.name }}{% endblock %}
+{% block content %}
+<p><a href="/project/{{ project.id }}">&larr; {{ project.name }}</a></p>
+<h1>Video Remix</h1>
+<p class="subtle">Upload a clip, describe the change — style, cast, setting — and get a transformed variant. Compare it side by side with the original.</p>
+
+<div class="panel">
+  <h2>New remix</h2>
+  <form method="post" action="/project/{{ project.id }}/remix" enctype="multipart/form-data">
+    <label class="field" for="video">Source clip (MP4 or MOV, max 100 MB)</label>
+    <input type="file" id="video" name="video" accept=".mp4,.mov,video/mp4,video/quicktime" required>
+    <label class="field" for="style_prompt">What should change?</label>
+    <textarea id="style_prompt" name="style_prompt" rows="3" required maxlength="2000"
+      placeholder="e.g. change to night, neon city streets, rain reflections — keep the same action"></textarea>
+    <p class="hint">Automatic lanes generate right away. DIY lane: the remix joins your job pack — generate it on your own account and upload the result.</p>
+    <p><input type="submit" class="primary" value="Queue remix"></p>
+  </form>
+</div>
+
+{% if remixes %}
+<div class="panel">
+  <h2>Remixes</h2>
+  {% for r in remixes %}
+  <div class="remix-card">
+    <p><strong>{{ r.style_prompt }}</strong></p>
+    <p class="subtle mono">{{ r.remix_id }} · {{ r.created_at }} · status: {{ r.status }}</p>
+    {% if r.error %}<p class="err">{{ r.error }}</p>{% endif %}
+    <div class="remix-compare">
+      <div>
+        <h4>Original</h4>
+        {% if r.source_url %}
+        <video controls preload="metadata" playsinline src="{{ r.source_url }}"></video>
+        {% else %}<p class="subtle">Source unavailable.</p>{% endif %}
+      </div>
+      <div>
+        <h4>Remix</h4>
+        {% if r.result_url %}
+        <video controls preload="metadata" playsinline src="{{ r.result_url }}"></video>
+        {% else %}<p class="subtle">No result yet.</p>{% endif %}
+      </div>
+    </div>
+    {% if r.status == "queued" or r.status == "failed" %}
+    <form method="post" action="/project/{{ project.id }}/remix/{{ r.remix_id }}/run" style="margin-top:8px">
+      <input type="submit" class="btn" value="Run now">
+    </form>
+    {% endif %}
+  </div>
+  {% endfor %}
+</div>
+{% endif %}
+
+<style>
+.remix-card{border:1px solid #1c2942;border-radius:12px;padding:16px;margin-bottom:16px;background:#0d1526}
+.remix-compare{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-top:12px}
+.remix-compare video{width:100%;border-radius:8px;background:#000}
+.remix-compare h4{margin:0 0 8px;color:#8fa1bd;font-size:13px;text-transform:uppercase;letter-spacing:.06em}
+@media (max-width:700px){.remix-compare{grid-template-columns:1fr}}
+.err{color:#E63946}
+textarea{width:100%;box-sizing:border-box;padding:12px;border-radius:10px;background:#080D18;border:1px solid #24406e;color:#F4F8FF;font-size:15px;font-family:inherit}
+textarea:focus{outline:none;border-color:#1677FF}
+</style>
+{% endblock %}

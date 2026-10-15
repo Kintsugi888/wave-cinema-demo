@@ -21,6 +21,7 @@ from datetime import datetime, timezone
 
 from . import assemble as _assemble
 from . import byok as _byok
+from . import captions as _captions
 from . import characters as _characters
 from . import cuts as _cuts
 from . import direct as _direct
@@ -29,8 +30,11 @@ from . import ingest as _ingest
 from . import jobpack as _jobpack
 from . import ledger as _ledger
 from . import pipeline as _pipeline
+from . import producer as _producer
 from . import providers as _providers
 from . import quote as _quote
+from . import remix as _remix
+from . import render_opts as _render_opts
 from . import slice as _slice
 from . import takes as _takes
 from . import transcribe as _transcribe
@@ -350,7 +354,7 @@ def generate_scene(project_id: str, scene_id: str,
         clip_path = _provider_for_project(project_id).generate(
             scene, scene["prompt"],
             duration_s=(scene["end_ms"] - scene["start_ms"]) / 1000.0,
-            aspect="16:9",
+            aspect=_render_opts.get_aspect_ratio(project_id),
             reference_images=_characters.character_reference_paths(project_id),
         )
         take = _takes.register_take(
@@ -499,6 +503,84 @@ def update_scene_prompt(project_id: str, scene_id: str, prompt: str) -> dict:
     return {"scene_id": scene_id, "prompt": prompt}
 
 
+# ---------------------------------------------------------------- producer
+
+def producer_chat(project_id: str, message: str) -> dict:
+    """Send a message to the in-project AI Producer."""
+    return _producer.chat(project_id, message)
+
+
+def producer_history(project_id: str) -> list[dict]:
+    """Chat history for the project's Producer."""
+    return _producer.get_history(project_id)
+
+
+# ---------------------------------------------------------------- captions
+
+def captions(project_id: str) -> dict:
+    """Timed captions for the project (cues + SRT + estimated flag)."""
+    return _captions.build_captions(project_id)
+
+
+def captions_srt(project_id: str) -> str:
+    """SRT file text for the project's captions."""
+    return _captions.build_captions(project_id)["srt"]
+
+
+# ---------------------------------------------------------------- remix
+
+def remix_submit(project_id: str, video_bytes: bytes, filename: str,
+                 style_prompt: str) -> dict:
+    """Upload a clip + style direction; queues a remix job."""
+    return _remix.submit_remix(project_id, video_bytes, filename, style_prompt)
+
+
+def remix_run(project_id: str, remix_id: str) -> dict:
+    """Execute a queued remix through the project's generation lane."""
+    provider = _provider_for_project(project_id)
+    return _remix.run_remix(project_id, remix_id, provider)
+
+
+def remix_list(project_id: str) -> list[dict]:
+    """All remix jobs for the project, newest first."""
+    return _remix.list_remixes(project_id)
+
+
+def remix_get(project_id: str, remix_id: str) -> dict:
+    """One remix job record."""
+    return _remix.get_remix(project_id, remix_id)
+
+
+# ---------------------------------------------------------------- render options
+
+def get_aspect_ratio(project_id: str) -> str:
+    return _render_opts.get_aspect_ratio(project_id)
+
+
+def set_aspect_ratio(project_id: str, aspect: str) -> dict:
+    return _render_opts.set_aspect_ratio(project_id, aspect)
+
+
+def get_resolution(project_id: str) -> str:
+    return _render_opts.get_resolution(project_id)
+
+
+def set_resolution(project_id: str, resolution: str) -> dict:
+    return _render_opts.set_resolution(project_id, resolution)
+
+
+def get_render_opts(project_id: str) -> dict:
+    return _render_opts.get_render_opts(project_id)
+
+
+def aspect_ratios() -> list[str]:
+    return list(_render_opts.ASPECT_RATIOS)
+
+
+def resolutions() -> list[str]:
+    return list(_render_opts.RESOLUTIONS)
+
+
 # ---------------------------------------------------------------- BYOK
 
 def byok_status(user_id: str | None = None) -> dict:
@@ -565,4 +647,9 @@ __all__ = [
     "add_character", "list_characters", "remove_character",
     "character_image_path", "update_scene_prompt",
     "byok_status", "byok_set_key", "byok_clear_key",
+    "producer_chat", "producer_history",
+    "captions", "captions_srt",
+    "remix_submit", "remix_run", "remix_list", "remix_get",
+    "get_aspect_ratio", "set_aspect_ratio", "get_resolution",
+    "set_resolution", "get_render_opts", "aspect_ratios", "resolutions",
 ]

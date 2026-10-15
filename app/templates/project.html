@@ -32,6 +32,39 @@
   {% endif %}
 </div>
 
+<div class="panel">
+  <h3>Render options</h3>
+  <div style="display:flex;gap:24px;flex-wrap:wrap;align-items:flex-end">
+    <form method="post" action="/project/{{ project.id }}/aspect">
+      <label class="field" for="aspect">Aspect ratio</label>
+      <select id="aspect" name="aspect" onchange="this.form.submit()">
+        {% for a in aspect_ratios %}
+        <option value="{{ a }}" {% if a == aspect_ratio %}selected{% endif %}>{{ a }}</option>
+        {% endfor %}
+      </select>
+    </form>
+    <form method="post" action="/project/{{ project.id }}/resolution">
+      <label class="field" for="resolution">Resolution</label>
+      <select id="resolution" name="resolution" onchange="this.form.submit()">
+        {% for r in resolutions %}
+        <option value="{{ r }}" {% if r == resolution %}selected{% endif %}>{{ r }}{% if r == "2K" %} (1.5x credits){% endif %}</option>
+        {% endfor %}
+      </select>
+    </form>
+  </div>
+  <p class="hint">Applies to new generations and the DIY job pack. 2K costs 1.5x the 1080p credit rate.</p>
+</div>
+
+<div class="panel">
+  <h3>Director's toolkit</h3>
+  <p>
+    <a class="btn" href="/project/{{ project.id }}/producer">Chat with the Producer</a>
+    <a class="btn" href="/project/{{ project.id }}/captions">Timed captions</a>
+    <a class="btn" href="/project/{{ project.id }}/remix">Video remix</a>
+  </p>
+  <p class="hint">The Producer knows your film — ask about pacing, scenes, or what to do next.</p>
+</div>
+
 <nav class="stepper" aria-label="Pipeline stages">
   {% for s in stages %}
   <a class="step {% if s.key == active_stage %}active{% elif s.done %}done{% endif %}"

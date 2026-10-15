@@ -1,0 +1,96 @@
+{% extends "base.html" %}
+{% block title %}Producer · {{ project.name }}{% endblock %}
+{% block content %}
+<p><a href="/project/{{ project.id }}">&larr; {{ project.name }}</a></p>
+<h1>The Producer</h1>
+<p class="subtle">Your in-house creative director. It knows your film — the song, the scenes, the cast — so ask it anything about directing.</p>
+
+<div class="panel">
+  <div id="chat-thread" class="chat-thread">
+    {% for m in history %}
+    <div class="chat-msg {{ m.role }}">
+      <div class="chat-bubble">{{ m.message }}</div>
+    </div>
+    {% endfor %}
+    {% if not history %}
+    <div class="chat-msg assistant">
+      <div class="chat-bubble">Hey — Producer here. Ask me about pacing, a specific scene ("what about scene 2"), character blocking, or what to do next.</div>
+    </div>
+    {% endif %}
+  </div>
+  <form id="chat-form" class="chat-form">
+    <input type="text" id="chat-input" placeholder="Ask the Producer…" maxlength="2000" autocomplete="off">
+    <input type="submit" class="primary" value="Send" id="chat-send">
+  </form>
+  <p class="hint" id="chat-status"></p>
+</div>
+
+<style>
+.chat-thread{display:flex;flex-direction:column;gap:12px;max-height:480px;overflow-y:auto;padding:8px 4px;margin-bottom:16px}
+.chat-msg{display:flex}
+.chat-msg.user{justify-content:flex-end}
+.chat-msg.assistant{justify-content:flex-start}
+.chat-bubble{max-width:75%;padding:12px 16px;border-radius:14px;font-size:15px;line-height:1.5;white-space:pre-wrap}
+.chat-msg.user .chat-bubble{background:#1677FF;color:#F4F8FF;border-bottom-right-radius:4px}
+.chat-msg.assistant .chat-bubble{background:#142B52;color:#C5D0E0;border-bottom-left-radius:4px}
+.chat-form{display:flex;gap:10px}
+.chat-form input[type=text]{flex:1;padding:13px 14px;border-radius:10px;background:#080D18;border:1px solid #24406e;color:#F4F8FF;font-size:15px}
+.chat-form input[type=text]:focus{outline:none;border-color:#1677FF}
+.chat-typing{color:#5b6b87;font-style:italic}
+</style>
+
+<script>
+(function(){
+  var thread = document.getElementById('chat-thread');
+  var form = document.getElementById('chat-form');
+  var input = document.getElementById('chat-input');
+  var send = document.getElementById('chat-send');
+  var status = document.getElementById('chat-status');
+  var pid = {{ project.id|tojson }};
+
+  function scrollDown(){ thread.scrollTop = thread.scrollHeight; }
+  function addMsg(role, text){
+    var d = document.createElement('div');
+    d.className = 'chat-msg ' + role;
+    var b = document.createElement('div');
+    b.className = 'chat-bubble';
+    b.textContent = text;
+    d.appendChild(b);
+    thread.appendChild(d);
+    scrollDown();
+    return d;
+  }
+  scrollDown();
+
+  form.addEventListener('submit', function(e){
+    e.preventDefault();
+    var msg = input.value.trim();
+    if(!msg) return;
+    input.value = '';
+    send.disabled = true;
+    addMsg('user', msg);
+    var typing = addMsg('assistant', '…');
+    typing.querySelector('.chat-bubble').classList.add('chat-typing');
+    fetch('/project/' + pid + '/producer/chat', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({message: msg})
+    }).then(function(r){ return r.json(); }).then(function(data){
+      typing.remove();
+      if(data.error){
+        addMsg('assistant', 'Hmm — ' + data.error);
+      } else {
+        addMsg('assistant', data.reply);
+      }
+      status.textContent = '';
+    }).catch(function(){
+      typing.remove();
+      addMsg('assistant', 'The Producer dropped out for a second — try again.');
+    }).finally(function(){
+      send.disabled = false;
+      input.focus();
+    });
+  });
+})();
+</script>
+{% endblock %}

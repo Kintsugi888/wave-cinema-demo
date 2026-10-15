@@ -34,14 +34,19 @@ CREDITS_PER_SECOND = 8
 QUOTE_TTL = timedelta(minutes=15)
 CLOUD_MODEL = "higgsfield/seedance-2.5"  # Wave Cinema Cloud model label
 CLOUD_MARGIN = 1.5  # pricing lever: cloud quotes are base x margin
+# Resolution multipliers (2K costs 1.5x the 1080p rate).
+RESOLUTION_MULTIPLIERS = {"1080p": 1.0, "2K": 1.5}
 
 
 def _utcnow() -> datetime:
     return datetime.now(timezone.utc)
 
 
-def price_for_duration_ms(duration_ms: int) -> tuple[int, int]:
+def price_for_duration_ms(duration_ms: int,
+                            resolution: str = "1080p") -> tuple[int, int]:
     """Return (billable_seconds, credits_total) for a scene duration.
+
+    resolution "2K" applies the 1.5x multiplier (rounded up).
 
     NOTE on the worked example: under the stated rule, 7.2s -> ceil = 8
     billable seconds -> 64 credits (the 40-credit minimum does not engage);
@@ -50,7 +55,9 @@ def price_for_duration_ms(duration_ms: int) -> tuple[int, int]:
     that needs a different (kinked) formula — flag before changing.
     """
     billable_seconds = max(1, math.ceil(duration_ms / 1000))
-    credits_total = max(MIN_CREDITS, CREDITS_PER_SECOND * billable_seconds)
+    base = max(MIN_CREDITS, CREDITS_PER_SECOND * billable_seconds)
+    mult = RESOLUTION_MULTIPLIERS.get(resolution, 1.0)
+    credits_total = math.ceil(base * mult)
     return billable_seconds, credits_total
 
 
@@ -67,7 +74,9 @@ def quote_scene(project_id: str, scene_id: str) -> dict:
     duration_ms = scene.get("duration_ms")
     if duration_ms is None:
         duration_ms = int(scene["end_ms"]) - int(scene["start_ms"])
-    billable_seconds, credits_total = price_for_duration_ms(duration_ms)
+    resolution = ws.state.get("resolution", "1080p")
+    billable_seconds, credits_total = price_for_duration_ms(
+        duration_ms, resolution=resolution)
     lane = ws.state.get("provider_lane", "byo")
     model = MODEL
     key_source = lane
@@ -84,6 +93,7 @@ def quote_scene(project_id: str, scene_id: str) -> dict:
             model = CLOUD_MODEL
             key_source = "cloud"
     now = _utcnow()
+    res_label = "2560x1440" if resolution == "2K" else RESOLUTION
     quote = {
         "quote_id": "q_" + uuid.uuid4().hex[:12],
         "project_id": project_id,
@@ -91,7 +101,7 @@ def quote_scene(project_id: str, scene_id: str) -> dict:
         "model": model,
         "lane": lane,
         "key_source": key_source,
-        "resolution": RESOLUTION,
+        "resolution": res_label,
         "jobs": 1,
         "billable_seconds": billable_seconds,
         "duration_ms": duration_ms,

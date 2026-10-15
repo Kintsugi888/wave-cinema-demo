@@ -29,6 +29,19 @@ NAVY = "0x142B52"
 ELECTRIC_BLUE = "0x1677FF"
 ICE_WHITE = "0xF4F8FF"
 
+# Render dimensions per aspect ratio (MockProvider).
+MOCK_DIMS = {
+    "16:9": (1280, 720),
+    "9:16": (720, 1280),
+    "1:1": (720, 720),
+    "21:9": (1280, 549),
+    "4:3": (960, 720),
+    "3:4": (720, 960),
+}
+
+# Aspects the Higgsfield API accepts.
+HF_ASPECTS = ("16:9", "9:16", "1:1", "21:9", "4:3", "3:4")
+
 
 # ------------------------------------------------------------- helpers
 
@@ -92,13 +105,14 @@ class MockProvider(ProviderAdapter):
     def generate(self, scene: dict, prompt: str, duration_s: float,
                  aspect: str = "16:9",
                  reference_images: list | None = None) -> str:
-        if aspect != "16:9":
-            raise ValueError(f"MockProvider renders 16:9 only, got {aspect!r}")
+        if aspect not in MOCK_DIMS:
+            raise ValueError(f"MockProvider: unsupported aspect {aspect!r}")
         if duration_s <= 0:
             raise ValueError("duration_s must be positive")
         scene_id = scene.get("scene_id", "s??")
         clip_name = f"{scene_id}-mock-{uuid.uuid4().hex[:6]}.mp4"
         clip_path = self.out_dir / clip_name
+        w, h = MOCK_DIMS[aspect]
 
         font_opt = f":fontfile={MONO_FONT}" if Path(MONO_FONT).exists() else ""
         prompt_line = prompt.replace("\n", " ").strip()[:64]
@@ -112,7 +126,7 @@ class MockProvider(ProviderAdapter):
             vf = (
                 "format=yuv420p,"
                 "noise=alls=8:allf=t,"
-                "crop=1280:720:x='(in_w-out_w)/2+80*sin(2*PI*t/12)':y='(in_h-out_h)/2',"
+                f"crop={w}:{h}:x='(in_w-out_w)/2+80*sin(2*PI*t/12)':y='(in_h-out_h)/2',"
                 f"drawbox=x=0:y=0:w=iw:h=10:c={ELECTRIC_BLUE}:t=fill,"
                 f"drawbox=x=0:y=ih-10:w=iw:h=10:c={ELECTRIC_BLUE}:t=fill,"
                 f"drawbox=x=0:y=0:w=10:h=ih:c={ELECTRIC_BLUE}:t=fill,"
@@ -126,7 +140,7 @@ class MockProvider(ProviderAdapter):
             subprocess.run(
                 ["ffmpeg", "-y", "-v", "error",
                  "-f", "lavfi", "-i",
-                 f"color=c={NAVY}:s=2560x1440:d={duration_s:.3f}:r=24",
+                 f"color=c={NAVY}:s={w*2}x{h*2}:d={duration_s:.3f}:r=24",
                  "-vf", vf,
                  "-t", f"{duration_s:.3f}",
                  "-r", "24", "-c:v", "libx264", "-pix_fmt", "yuv420p",
@@ -278,7 +292,7 @@ class HiggsfieldProvider(ProviderAdapter):
     def generate(self, scene: dict, prompt: str, duration_s: float,
                  aspect: str = "16:9",
                  reference_images: list | None = None) -> str:
-        if aspect not in ("16:9", "9:16", "1:1"):
+        if aspect not in HF_ASPECTS:
             raise ValueError(f"HiggsfieldProvider: unsupported aspect {aspect!r}")
         if duration_s <= 0:
             raise ValueError("duration_s must be positive")
@@ -311,7 +325,7 @@ class RealProvider(ProviderAdapter):
       - scene: dict with scene_id, start_ms, end_ms, duration_ms (+ cast)
       - prompt: self-contained scene prompt string (identity locks restated)
       - duration_s: float, provider bounds 5–15 s per scene
-      - aspect: one of "16:9", "9:16", "1:1" (render target 1280x720 for 16:9)
+      - aspect: one of "16:9", "9:16", "1:1", "21:9", "4:3", "3:4"
       - up to 9 reference images per scene (character/set consistency)
       - returns the path of the downloaded clip (bytes + SHA-256 verified
         by the caller before it becomes a take)

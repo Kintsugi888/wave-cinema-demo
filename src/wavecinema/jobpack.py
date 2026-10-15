@@ -33,6 +33,7 @@ from .takes import register_take
 from .workspace import ProjectWorkspace, project_dir
 
 CLIP_RE = re.compile(r"^(?:scene_(\d+)|s(\d+))\.mp4$", re.IGNORECASE)
+REMIX_RE = re.compile(r"^remix_(rx_[a-f0-9]+)\.mp4$", re.IGNORECASE)
 MAX_IMPORT_BYTES = 500 * 1024 * 1024
 
 README_TEXT = """WAVE CINEMA — BYO JOB PACK
@@ -45,7 +46,8 @@ HOW TO GENERATE
 1. Open prompts/scene_00.txt … scene_NN.txt — one self-contained prompt
    per scene. Animate each scene's still (in stills/, if present) or use
    the prompt as a text-to-video prompt.
-2. Keep every clip 16:9, 24 fps if you can. Length per scene is in
+2. Render at the aspect ratio in pack.json ("aspect_ratio") — keep every
+   clip at that ratio, 24 fps if you can. Length per scene is in
    pack.json (duration_ms). A little over is fine; the edit trims.
 3. Character identity is non-negotiable: match the identity locks stated
    in each prompt exactly (hair, eyes, skin, wardrobe). If cast/ holds
@@ -121,8 +123,18 @@ def build_pack(project_id: str) -> Path:
         "project_name": ws.state.get("name", project_id),
         "generated_at": datetime.now(timezone.utc).isoformat(),
         "rights_statement": (ws.state.get("rights") or {}).get("statement_version"),
+        "aspect_ratio": ws.state.get("aspect_ratio", "16:9"),
+        "resolution": ws.state.get("resolution", "1080p"),
         "scene_count": len(pack_scenes),
         "scenes": pack_scenes,
+        "remixes": [
+            {"remix_id": r["remix_id"],
+             "style_prompt": r["style_prompt"],
+             "full_prompt": r["full_prompt"],
+             "clip_name": f"remix_{r['remix_id']}.mp4"}
+            for r in (ws.state.get("remixes") or {}).values()
+            if r.get("status") in ("queued", "failed")
+        ],
         "characters": [
             {"character_id": c["character_id"], "name": c["name"],
              "file": f"cast/{c['filename']}"}
@@ -174,6 +186,14 @@ def _clip_scene_id(filename: str, scene_ids: set[str]) -> str | None:
     return sid if sid in scene_ids else None
 
 
+def _clip_remix_id(filename: str, remix_ids: set[str]) -> str | None:
+    m = REMIX_RE.match(filename)
+    if not m:
+        return None
+    rid = m.group(1)
+    return rid if rid in remix_ids else None
+
+
 def import_clips_zip(project_id: str, zip_bytes: bytes) -> dict:
     """Register user-generated clips from an uploaded zip as takes.
 
@@ -188,6 +208,8 @@ def import_clips_zip(project_id: str, zip_bytes: bytes) -> dict:
     ws = ProjectWorkspace.load(project_id)
     scenes = _scenes(ws)
     scene_ids = {str(s.get("scene_id")) for s in scenes}
+    remix_ids = {r for r, j in (ws.state.get("remixes") or {}).items()
+                 if j.get("status") in ("queued", "failed")}
 
     imported: list[dict] = []
     skipped: list[dict] = []
@@ -207,6 +229,37 @@ def import_clips_zip(project_id: str, zip_bytes: bytes) -> dict:
 
         for clip in sorted(tmpdir.iterdir()):
             if not clip.is_file():
+                continue
+            # Remix result clips first (remix_<id>.mp4).
+            rid = _clip_remix_id(clip.name, remix_ids)
+            if rid is not None:
+                if not _looks_like_mp4(clip):
+                    skipped.append({"file": clip.name,
+                                    "reason": "not a valid mp4 (ftyp box missing)"})
+                    continue
+                take = register_take(
+                    project_id, rid, clip,
+                    job_idempotency_key=f"byo-remix:{clip.name}",
+                )
+                # Mark the remix done with the DIY result.
+                ws2 = ProjectWorkspace.load(project_id)
+                rev2 = ws2.revision
+                job = ws2.state["remixes"][rid]
+                job["status"] = "done"
+                job["result_path"] = take["path"]
+                job["result_take_id"] = take["take_id"]
+                from datetime import datetime, timezone
+                job["completed_at"] = datetime.now(timezone.utc).isoformat()
+                ws2.state["remixes"][rid] = job
+                ws2.log_event(f"BYO remix import: {rid} -> take {take['take_id']}")
+                ws2.save(expected_revision=rev2)
+                imported.append({
+                    "file": clip.name,
+                    "remix_id": rid,
+                    "take_id": take["take_id"],
+                    "bytes": take["bytes"],
+                    "sha256": take["sha256"],
+                })
                 continue
             sid = _clip_scene_id(clip.name, scene_ids)
             if sid is None:
