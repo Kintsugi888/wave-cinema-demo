@@ -15,10 +15,45 @@
     <img class="logo" src="/brand/logo.jpg" alt="Wave Cinema logo" onerror="this.style.display='none'">
     <span class="wordmark">WAVE <b>CINEMA</b></span>
   </a>
-  <div class="credits-pill" title="Credit balance (owner account)">
-    CREDITS&nbsp;<strong>{{ credits if credits is not none else "-" }}</strong>
+  <div class="topbar-right">
+    {% if user %}
+    <div class="credits-pill" title="Credit balance">
+      CREDITS&nbsp;<strong>{{ credits if credits is not none else "-" }}</strong>
+    </div>
+    <div class="account-menu">
+      {% if user.avatar_url %}
+      <img class="avatar" src="{{ user.avatar_url }}" alt="" onerror="this.style.display='none'">
+      {% endif %}
+      <span class="account-name">{{ user.name }}</span>
+      <div class="account-dropdown">
+        <a href="/settings">Settings</a>
+        <a href="/billing">Billing</a>
+        <a href="/logout">Sign out</a>
+      </div>
+    </div>
+    {% else %}
+    <a class="signin-btn" href="/login">Sign in</a>
+    {% endif %}
   </div>
 </header>
+<style>
+.topbar-right{display:flex;align-items:center;gap:12px;margin-left:auto}
+.signin-btn{background:#1677FF;color:#fff;padding:9px 18px;border-radius:8px;
+  text-decoration:none;font-weight:600;font-size:14px}
+.signin-btn:hover{background:#0f66e0}
+.account-menu{position:relative;display:flex;align-items:center;gap:8px;cursor:pointer}
+.avatar{width:32px;height:32px;border-radius:50%;object-fit:cover}
+.account-name{color:#C5D0E0;font-size:14px;font-weight:600;max-width:120px;
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.account-dropdown{display:none;position:absolute;top:100%;right:0;margin-top:8px;
+  background:#0d1526;border:1px solid #1c2942;border-radius:10px;min-width:160px;
+  box-shadow:0 12px 32px rgba(0,0,0,.5);z-index:100}
+.account-menu:hover .account-dropdown{display:block}
+.account-dropdown a{display:block;padding:11px 16px;color:#C5D0E0;text-decoration:none;font-size:14px}
+.account-dropdown a:hover{background:#142B52;color:#F4F8FF}
+.account-dropdown a:first-child{border-radius:10px 10px 0 0}
+.account-dropdown a:last-child{border-radius:0 0 10px 10px}
+</style>
 <div class="wrap">
   {% if backend_ok is defined and not backend_ok %}
   <div class="banner info">

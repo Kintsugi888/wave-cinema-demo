@@ -11,12 +11,13 @@ import uuid
 from pathlib import Path
 from typing import Any, Optional
 
-from fastapi import FastAPI, Form, File, UploadFile, Query, Request
-from fastapi.responses import HTMLResponse, RedirectResponse, FileResponse
+from fastapi import FastAPI, Form, File, UploadFile, Query, Request, Cookie
+from fastapi.responses import HTMLResponse, RedirectResponse, FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
 from backend_client import Backend, bcall
+import auth as authmod
 
 # Bundled ffmpeg on PATH (free hosts ship no system ffmpeg/ffprobe).
 from wavecinema import ffmpeg_bin  # noqa: F401  (import-time PATH fix)
@@ -59,6 +60,59 @@ STAGES = [
 STAGE_KEYS = [s["key"] for s in STAGES]
 
 
+# ------------------------------------------------------------------ auth
+
+PUBLIC_PATHS = ("/", "/faq", "/terms", "/privacy", "/refunds",
+                "/login", "/auth/", "/brand/", "/static/")
+
+
+def get_current_user(request: Request) -> Optional[dict]:
+    token = request.cookies.get(authmod.SESSION_COOKIE)
+    if not token:
+        return None
+    return authmod.verify_session(token)
+
+
+def require_user(request: Request) -> dict:
+    user = get_current_user(request)
+    if not user:
+        raise _LoginRequired()
+    return user
+
+
+class _LoginRequired(Exception):
+    pass
+
+
+@app.middleware("http")
+async def auth_middleware(request: Request, call_next):
+    path = request.url.path
+    is_public = path in PUBLIC_PATHS or any(
+        path.startswith(p) for p in PUBLIC_PATHS if p.endswith("/"))
+    # /billing page itself is public (shows packs); checkout requires login.
+    if path == "/billing" or path.startswith("/billing/"):
+        is_public = path in ("/billing", "/billing/success")
+    if path.startswith("/webhooks/"):
+        is_public = True
+    if not is_public and not get_current_user(request):
+        return RedirectResponse("/login", status_code=303)
+    request.state.user = get_current_user(request)
+    try:
+        return await call_next(request)
+    except _LoginRequired:
+        return RedirectResponse("/login", status_code=303)
+
+
+def _set_session_cookie(resp: RedirectResponse, user: dict) -> RedirectResponse:
+    token = authmod.create_session(user["id"])
+    resp.set_cookie(
+        authmod.SESSION_COOKIE, token,
+        max_age=authmod.SESSION_MAX_AGE,
+        httponly=True, secure=True, samesite="lax", path="/",
+    )
+    return resp
+
+
 # ---------------------------------------------------------------- helpers
 
 def _g(d: Any, *keys: str, default: Any = None) -> Any:
@@ -98,14 +152,23 @@ def _save_json(path: Path, data: Any) -> None:
     path.write_text(json.dumps(data, indent=2))
 
 
-def registry_list() -> list:
+def registry_list(user_id: Optional[str] = None) -> list:
     items = _load_json(REGISTRY, [])
-    return items if isinstance(items, list) else []
+    if not isinstance(items, list):
+        return []
+    if user_id:
+        items = [i for i in items
+                 if i.get("owner_id") == user_id or "owner_id" not in i]
+    return items
 
 
-def registry_add(pid: str, name: str) -> None:
-    items = [i for i in registry_list() if i.get("id") != pid]
-    items.append({"id": pid, "name": name})
+def registry_add(pid: str, name: str, user_id: Optional[str] = None) -> None:
+    items = [i for i in _load_json(REGISTRY, []) if isinstance(i, dict)
+             and i.get("id") != pid]
+    entry = {"id": pid, "name": name}
+    if user_id:
+        entry["owner_id"] = user_id
+    items.append(entry)
     _save_json(REGISTRY, items)
 
 
@@ -118,8 +181,9 @@ def save_pending_quotes(q: dict) -> None:
     _save_json(QUOTES, q)
 
 
-def get_credits() -> Optional[int]:
-    ok, res = bcall(backend.credit_balance, account_id="owner")
+def get_credits(user: Optional[dict] = None) -> Optional[int]:
+    account_id = authmod.ledger_account_id(user) if user else "owner"
+    ok, res = bcall(backend.credit_balance, account_id=account_id)
     if not ok:
         return None
     if isinstance(res, dict):
@@ -130,14 +194,17 @@ def get_credits() -> Optional[int]:
         return None
 
 
-def ctx(error: Optional[str] = None, **kw) -> dict:
-    credits = get_credits()
+def ctx(request: Optional[Request] = None,
+        error: Optional[str] = None, **kw) -> dict:
+    user = getattr(request.state, "user", None) if request else None
+    credits = get_credits(user)
     base = {
         "backend_ok": backend.ok,
         "credits": f"{credits:,}" if credits is not None else None,
         "error": error,
         "rights_version": RIGHTS_VERSION,
         "rights_text": RIGHTS_TEXT,
+        "user": user,
     }
     base.update(kw)
     return base
@@ -387,18 +454,20 @@ def project_media(pid: str, path: str = Query(...)):
 
 @app.get("/", response_class=HTMLResponse)
 def dashboard(request: Request, request_error: Optional[str] = Query(None, alias="err")):
+    user = get_current_user(request)
     projects = []
-    for item in registry_list():
+    for item in registry_list(user["id"] if user else None):
         pid = item.get("id", "")
         name = item.get("name", pid)
         ok, p, _ = project_of(pid)
         stage_label = detect_stage(p) if ok and p else "unknown"
         projects.append({"id": pid, "name": name, "stage_label": stage_label})
-    return templates.TemplateResponse(request, "dashboard.html", ctx(error=request_error, projects=projects))
+    return templates.TemplateResponse(request, "dashboard.html", ctx(request, error=request_error, projects=projects))
 
 
 @app.post("/projects")
-def create_project(name: str = Form(...)):
+def create_project(request: Request, name: str = Form(...)):
+    user = require_user(request)
     name = (name or "").strip()[:120] or "Untitled film"
     ok, res = bcall(backend.create_project, name)
     if not ok:
@@ -406,8 +475,118 @@ def create_project(name: str = Form(...)):
     pid = res if isinstance(res, str) else _g(res, "project_id", "id", default="")
     if not pid:
         return RedirectResponse(f"/?err={_q('create_project returned no project id')}", status_code=303)
-    registry_add(str(pid), name)
+    registry_add(str(pid), name, user["id"])
     return RedirectResponse(f"/project/{pid}", status_code=303)
+
+
+# ------------------------------------------------------------------ auth routes
+
+@app.get("/login", response_class=HTMLResponse)
+def login_page(request: Request,
+               err: Optional[str] = Query(None),
+               notice: Optional[str] = Query(None)):
+    if get_current_user(request):
+        return RedirectResponse("/", status_code=303)
+    return templates.TemplateResponse(request, "login.html", ctx(
+        request, error=err, notice=notice,
+        google_on=authmod.google_configured(),
+        x_on=authmod.x_configured(),
+    ))
+
+
+@app.get("/logout")
+def logout():
+    resp = RedirectResponse("/", status_code=303)
+    resp.delete_cookie(authmod.SESSION_COOKIE, path="/")
+    return resp
+
+
+@app.post("/auth/email")
+def auth_email(email: str = Form(...)):
+    email = (email or "").strip().lower()
+    if "@" not in email or "." not in email.split("@")[-1]:
+        return RedirectResponse("/login?err=Please+enter+a+valid+email.", status_code=303)
+    token = authmod.create_magic_token(email)
+    authmod.send_magic_link(email, token)
+    return RedirectResponse(
+        "/login?notice=Check+your+email+for+the+sign-in+link.", status_code=303)
+
+
+@app.get("/auth/email/verify")
+def auth_email_verify(token: str = Query("")):
+    email = authmod.verify_magic_token(token)
+    if not email:
+        return RedirectResponse(
+            "/login?err=That+link+is+invalid+or+expired.+Try+again.", status_code=303)
+    user = authmod.create_user(email, provider="email")
+    return _set_session_cookie(RedirectResponse("/", status_code=303), user)
+
+
+@app.get("/auth/google")
+def auth_google():
+    if not authmod.google_configured():
+        return RedirectResponse("/login?err=Google+sign-in+is+not+configured.",
+                                status_code=303)
+    state = authmod.oauth_state_token({"provider": "google"})
+    return RedirectResponse(authmod.google_auth_url(state), status_code=303)
+
+
+@app.get("/auth/google/callback")
+def auth_google_callback(code: str = Query(""), state: str = Query("")):
+    if not authmod.oauth_state_verify(state):
+        return RedirectResponse("/login?err=Invalid+sign-in+state.", status_code=303)
+    try:
+        info = authmod.google_exchange(code)
+    except Exception:
+        return RedirectResponse("/login?err=Google+sign-in+failed.+Try+again.",
+                                status_code=303)
+    if not info.get("email"):
+        return RedirectResponse("/login?err=Google+did+not+share+your+email.",
+                                status_code=303)
+    user = authmod.create_user(info["email"], name=info.get("name", ""),
+                               avatar_url=info.get("avatar_url", ""),
+                               provider="google")
+    return _set_session_cookie(RedirectResponse("/", status_code=303), user)
+
+
+@app.get("/auth/x")
+def auth_x():
+    if not authmod.x_configured():
+        return RedirectResponse("/login?err=X+sign-in+is+not+configured.",
+                                status_code=303)
+    url, verifier = authmod.x_auth_url(
+        authmod.oauth_state_token({"provider": "x"}))
+    resp = RedirectResponse(url, status_code=303)
+    # PKCE verifier: short-lived, httponly cookie (10 min).
+    resp.set_cookie("wc_pkce", authmod.oauth_state_token({"v": verifier}),
+                    max_age=600, httponly=True, secure=True, samesite="lax",
+                    path="/auth/x/callback")
+    return resp
+
+
+@app.get("/auth/x/callback")
+def auth_x_callback(request: Request,
+                    code: str = Query(""), state: str = Query("")):
+    if not authmod.oauth_state_verify(state):
+        return RedirectResponse("/login?err=Invalid+sign-in+state.", status_code=303)
+    raw = request.cookies.get("wc_pkce", "")
+    verifier = (authmod.oauth_state_verify(raw) or {}).get("v", "")
+    if not verifier:
+        return RedirectResponse("/login?err=Sign-in+expired.+Try+again.",
+                                status_code=303)
+    try:
+        info = authmod.x_exchange(code, verifier)
+    except Exception:
+        return RedirectResponse("/login?err=X+sign-in+failed.+Try+again.",
+                                status_code=303)
+    # X may not share email; fall back to a stable placeholder tied to username.
+    email = info.get("email") or f"{info.get('x_username', 'x_user')}@x.local"
+    user = authmod.create_user(email, name=info.get("name", ""),
+                               avatar_url=info.get("avatar_url", ""),
+                               provider="x")
+    resp = _set_session_cookie(RedirectResponse("/", status_code=303), user)
+    resp.delete_cookie("wc_pkce", path="/auth/x/callback")
+    return resp
 
 
 def _q(msg: str) -> str:
@@ -437,12 +616,23 @@ def project_page(request: Request,
                  stage: Optional[str] = Query(None),
                  err: Optional[str] = Query(None),
                  status: Optional[str] = Query(None)):
+    user = require_user(request)
     ok, p, perr = project_of(pid)
     if not ok:
         return templates.TemplateResponse(
             request, "dashboard.html",
-            ctx(error=perr or "Project not found", projects=[]),
+            ctx(request, error=perr or "Project not found", projects=[]),
             status_code=404)
+    # Ownership check: users can only see their own projects.
+    # Legacy projects without owner_id are visible to all signed-in users.
+    owner_id = p.get("owner_id") if isinstance(p, dict) else None
+    if owner_id is None:
+        for item in registry_list():
+            if item.get("id") == pid:
+                owner_id = item.get("owner_id")
+                break
+    if owner_id and owner_id != user["id"]:
+        return RedirectResponse("/?err=Project+not+found", status_code=303)
     active = stage if stage in STAGE_KEYS else detect_stage(p)
     order = {k: i for i, k in enumerate(STAGE_KEYS)}
     stages = [{**s, "done": order[s["key"]] < order[active]} for s in STAGES]
@@ -456,7 +646,7 @@ def project_page(request: Request,
     if not auto.get("ok"):
         # Keep the technical reason out of the UI; users just need the gist.
         auto = {**auto, "reason": "coming soon. DIY Clips works right now"}
-    return templates.TemplateResponse(request, "project.html", ctx(
+    return templates.TemplateResponse(request, "project.html", ctx(request,
         error=err,
         project={"id": pid, "name": _g(p, "name", default=pid)},
         stages=stages,
@@ -699,12 +889,13 @@ def character_image(pid: str, cid: str):
 def settings_page(request: Request,
                   err: Optional[str] = Query(None),
                   status: Optional[str] = Query(None)):
-    ok, st = bcall(backend.byok_status)
+    user = require_user(request)
+    ok, st = bcall(backend.byok_status, user["id"])
     byok = st if ok and isinstance(st, dict) else {"set": False, "masked": None}
     ok_auto, auto_res = bcall(backend.auto_generation_available)
     auto = (auto_res if ok_auto and isinstance(auto_res, dict)
             else {"ok": False, "key_source": "none", "label": ""})
-    return templates.TemplateResponse(request, "settings.html", ctx(
+    return templates.TemplateResponse(request, "settings.html", ctx(request,
         error=err,
         notice=status,
         byok=byok,
@@ -713,8 +904,9 @@ def settings_page(request: Request,
 
 
 @app.post("/settings/byok")
-def settings_byok_set(api_key: str = Form(...)):
-    ok, res = bcall(backend.byok_set_key, api_key)
+def settings_byok_set(request: Request, api_key: str = Form(...)):
+    user = require_user(request)
+    ok, res = bcall(backend.byok_set_key, api_key, user["id"])
     if not ok:
         return RedirectResponse(f"/settings?err={_q(res)}", status_code=303)
     return RedirectResponse(
@@ -723,8 +915,9 @@ def settings_byok_set(api_key: str = Form(...)):
 
 
 @app.post("/settings/byok/delete")
-def settings_byok_delete():
-    ok, res = bcall(backend.byok_clear_key)
+def settings_byok_delete(request: Request):
+    user = require_user(request)
+    ok, res = bcall(backend.byok_clear_key, user["id"])
     if not ok:
         return RedirectResponse(f"/settings?err={_q(res)}", status_code=303)
     return RedirectResponse(

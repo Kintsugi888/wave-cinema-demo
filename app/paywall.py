@@ -125,8 +125,9 @@ class LedgerUnavailable(RuntimeError):
     so Stripe retries delivery instead of silently dropping a paid purchase."""
 
 
-def _grant_via_ledger(pack: Dict[str, Any], session_id: str) -> Any:
-    """Grant pack credits to the owner ledger, idempotent on the memo key.
+def _grant_via_ledger(pack: Dict[str, Any], session_id: str,
+                      account_id: str = ACCOUNT_ID) -> Any:
+    """Grant pack credits to the ledger, idempotent on the memo key.
 
     The backend ``wavecinema.api.grant_credits`` is itself idempotent on the
     memo (``stripe:<session_id>``); the webhook also guards locally so a
@@ -140,7 +141,7 @@ def _grant_via_ledger(pack: Dict[str, Any], session_id: str) -> Any:
     grant = getattr(ledger_api, "grant_credits", None)
     if grant is None:
         raise LedgerUnavailable("wavecinema.api has no grant_credits function")
-    return grant(account_id=ACCOUNT_ID, credits=pack["credits"], memo=memo)
+    return grant(account_id=account_id, credits=pack["credits"], memo=memo)
 
 
 def _get_balance() -> Optional[int]:
@@ -383,7 +384,7 @@ class CheckoutRequest(BaseModel):
 
 
 @router.post("/billing/checkout")
-async def create_checkout(req: CheckoutRequest):
+async def create_checkout(req: CheckoutRequest, request: Request):
     """Create a Stripe Checkout Session (TEST MODE) and return its redirect URL."""
     status = billing_status()
     if not status["configured"]:
@@ -397,17 +398,27 @@ async def create_checkout(req: CheckoutRequest):
             {"error": "unknown_pack", "valid_pack_ids": sorted(PACKS)},
             status_code=400,
         )
+    # Per-user ledger account: credit the signed-in user, fall back to owner.
+    account_id = ACCOUNT_ID
+    try:
+        import auth as authmod
+        token = request.cookies.get(authmod.SESSION_COOKIE, "")
+        user = authmod.verify_session(token) if token else None
+        if user:
+            account_id = authmod.ledger_account_id(user)
+    except Exception:
+        pass
     base = _env("WAVE_CINEMA_BASE_URL") or "http://localhost:8000"
     try:
         session = stripe.checkout.Session.create(
             api_key=_env("STRIPE_SECRET_KEY"),
             mode="payment",
             line_items=[{"price": status["prices"][pack["pack_id"]], "quantity": 1}],
-            client_reference_id=ACCOUNT_ID,
+            client_reference_id=account_id,
             metadata={
                 "pack_id": pack["pack_id"],
                 "credits": str(pack["credits"]),
-                "account_id": ACCOUNT_ID,
+                "account_id": account_id,
             },
             success_url=f"{base}/billing/success?session_id={{CHECKOUT_SESSION_ID}}",
             cancel_url=f"{base}/billing?canceled=1",
@@ -481,7 +492,9 @@ async def stripe_webhook(request: Request):
         )
 
     try:
-        _grant_via_ledger(pack, session_id)
+        metadata = _so(session_obj, "metadata") or {}
+        grant_account = _so(metadata, "account_id") or ACCOUNT_ID
+        _grant_via_ledger(pack, session_id, account_id=grant_account)
     except LedgerUnavailable:
         logger.exception("ledger unavailable for session %s; Stripe will retry", session_id)
         return JSONResponse({"error": "ledger_unavailable"}, status_code=503)

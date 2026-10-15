@@ -18,6 +18,8 @@ import os
 import secrets
 from pathlib import Path
 
+from typing import Optional
+
 from cryptography.fernet import Fernet, InvalidToken
 
 from .errors import WaveCinemaError
@@ -25,6 +27,13 @@ from .workspace import DATA_DIR
 
 KEY_FILE = DATA_DIR / "byok.json"
 SECRET_FILE = DATA_DIR / ".byok_secret"
+
+
+def _key_file(user_id: Optional[str] = None) -> Path:
+    if user_id:
+        safe = "".join(c for c in user_id if c.isalnum() or c in "_-")[:32]
+        return DATA_DIR / f"byok_{safe}.json"
+    return KEY_FILE
 
 
 class BYOKError(WaveCinemaError):
@@ -68,34 +77,39 @@ def _validate_shape(api_key: str) -> str:
     return key
 
 
-def set_key(api_key: str) -> dict:
+def set_key(api_key: str, user_id: Optional[str] = None) -> dict:
     """Encrypt and store the user's API key. Returns a masked status."""
     key = _validate_shape(api_key)
     token = _fernet().encrypt(key.encode()).decode()
     DATA_DIR.mkdir(parents=True, exist_ok=True)
-    KEY_FILE.write_text(json.dumps({"token": token}), encoding="utf-8")
+    kf = _key_file(user_id)
+    kf.write_text(json.dumps({"token": token}), encoding="utf-8")
     try:
-        os.chmod(KEY_FILE, 0o600)
+        os.chmod(kf, 0o600)
     except OSError:
         pass
-    return status()
+    return status(user_id)
 
 
-def get_key() -> str | None:
+def get_key(user_id: Optional[str] = None) -> str | None:
     """Decrypt and return the stored key, or None if unset/unreadable."""
-    if not KEY_FILE.exists():
+    kf = _key_file(user_id)
+    # Fall back to the legacy global key file for backwards compat.
+    if not kf.exists() and user_id:
+        kf = KEY_FILE
+    if not kf.exists():
         return None
     try:
-        token = json.loads(KEY_FILE.read_text(encoding="utf-8"))["token"]
+        token = json.loads(kf.read_text(encoding="utf-8"))["token"]
         return _fernet().decrypt(token.encode()).decode()
     except (InvalidToken, KeyError, ValueError, OSError):
         return None
 
 
-def clear_key() -> dict:
+def clear_key(user_id: Optional[str] = None) -> dict:
     """Remove the stored key."""
-    KEY_FILE.unlink(missing_ok=True)
-    return status()
+    _key_file(user_id).unlink(missing_ok=True)
+    return status(user_id)
 
 
 def _masked(key: str) -> str:
@@ -104,8 +118,8 @@ def _masked(key: str) -> str:
     return f"{key[:4]}…{key[-4:]}"
 
 
-def status() -> dict:
+def status(user_id: Optional[str] = None) -> dict:
     """{"set": bool, "masked": str|None} — never exposes the key."""
-    key = get_key()
+    key = get_key(user_id)
     return {"set": key is not None,
             "masked": _masked(key) if key else None}

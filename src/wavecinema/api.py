@@ -475,19 +475,19 @@ def character_image_path(project_id: str, character_id: str) -> str:
 
 # ---------------------------------------------------------------- BYOK
 
-def byok_status() -> dict:
+def byok_status(user_id: str | None = None) -> dict:
     """{"set": bool, "masked": str|None} — never exposes the key."""
-    return _byok.status()
+    return _byok.status(user_id)
 
 
-def byok_set_key(api_key: str) -> dict:
+def byok_set_key(api_key: str, user_id: str | None = None) -> dict:
     """Encrypt and store the user's own generation API key."""
-    return _byok.set_key(api_key)
+    return _byok.set_key(api_key, user_id)
 
 
-def byok_clear_key() -> dict:
+def byok_clear_key(user_id: str | None = None) -> dict:
     """Remove the stored BYOK key."""
-    return _byok.clear_key()
+    return _byok.clear_key(user_id)
 
 
 # ---------------------------------------------------------------- credits

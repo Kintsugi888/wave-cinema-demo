@@ -7,3 +7,5 @@ stripe==16.0.0
 gradio==6.30.0
 imageio-ffmpeg==0.6.0
 cryptography==44.0.1
+authlib==1.6.0
+itsdangerous==2.2.0
