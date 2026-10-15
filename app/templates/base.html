@@ -34,5 +34,61 @@
   {% endif %}
   {% block content %}{% endblock %}
 </div>
+
+<footer class="footer">
+  <div class="foot-inner">
+    <span class="foot-brand">WAVE CINEMA <span class="subtle">— Wave Pon Waves</span></span>
+    <nav class="foot-links">
+      <a href="/faq">FAQ</a>
+      <a href="/terms">Terms</a>
+      <a href="/privacy">Privacy</a>
+      <a href="/refunds">Refunds</a>
+    </nav>
+  </div>
+  <p class="subtle foot-note">Test mode — no real money moves here. Credits have no cash value and are non-transferable.</p>
+</footer>
+
+<div id="radio" class="radio-widget" aria-label="Shamz Radio">
+  <button id="radio-toggle" class="radio-btn" title="Play Shamz Radio">▶</button>
+  <div class="radio-meta">
+    <div class="radio-title">SHAMZ RADIO</div>
+    <div id="radio-track" class="radio-track">Tap play — 8 tracks on shuffle</div>
+  </div>
+  <button id="radio-next" class="radio-btn small" title="Next track">⏭</button>
+  <audio id="radio-audio" preload="none"></audio>
+</div>
+<script>
+(function(){
+  var tracks = [
+    ["uplift-part-2.mp3", "UPLIFT (Part 2)"],
+    ["incredible-part-2.mp3", "INCREDIBLE (Part 2)"],
+    ["shadow-clone.mp3", "Shadow Clone"],
+    ["six-degrees.mp3", "Six Degrees"],
+    ["sage-mode.mp3", "Sage Mode"],
+    ["sea-signs.mp3", "Sea Signs"],
+    ["symbols.mp3", "Symbols"],
+    ["6ix-sense.mp3", "6ix Sense"]
+  ];
+  // shuffle
+  for (var i = tracks.length - 1; i > 0; i--) {
+    var j = Math.floor(Math.random() * (i + 1));
+    var t = tracks[i]; tracks[i] = tracks[j]; tracks[j] = t;
+  }
+  var idx = 0, audio = document.getElementById('radio-audio'),
+      toggle = document.getElementById('radio-toggle'),
+      next = document.getElementById('radio-next'),
+      label = document.getElementById('radio-track');
+  function load(i) {
+    idx = (i + tracks.length) % tracks.length;
+    audio.src = "/static/audio/" + tracks[idx][0];
+    label.textContent = "♪ " + tracks[idx][1] + " — Shamz";
+  }
+  function play() { load(idx); audio.play(); toggle.textContent = "⏸"; toggle.classList.add("playing"); }
+  function pause() { audio.pause(); toggle.textContent = "▶"; toggle.classList.remove("playing"); }
+  toggle.addEventListener("click", function(){ audio.paused ? play() : pause(); });
+  next.addEventListener("click", function(){ load(idx + 1); audio.play(); toggle.textContent = "⏸"; toggle.classList.add("playing"); });
+  audio.addEventListener("ended", function(){ load(idx + 1); audio.play(); });
+})();
+</script>
 </body>
 </html>

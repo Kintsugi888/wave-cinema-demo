@@ -3,3 +3,8 @@ __pycache__/
 .venv/
 *.log
 .DS_Store
+
+# binaries ship via GitHub web upload (HF rejects binaries)
+app/static/audio/
+app/static/showcase/
+brand/logo.jpg

@@ -1,0 +1,33 @@
+{% extends "base.html" %}
+{% block title %}Privacy Policy{% endblock %}
+{% block content %}
+<p><a href="/">&larr; Back</a></p>
+<h1>Privacy Policy</h1>
+<p class="subtle">Last updated: 15 October 2026 · Wave Cinema (test build)</p>
+
+<div class="panel">
+  <h2>What we collect</h2>
+  <ul>
+    <li><strong>Your uploads</strong> — songs, clips and the videos we assemble. That's the whole point of the app.</li>
+    <li><strong>Project data</strong> — your film names, scene plans, and which takes you crowned.</li>
+    <li><strong>Payment info</strong> — handled by Stripe, never stored on our servers. In test mode, none of it's real anyway.</li>
+    <li><strong>Basic technical bits</strong> — the boring stuff servers log (IP, browser type) to keep things running.</li>
+  </ul>
+
+  <h2>What we don't do</h2>
+  <ul>
+    <li>We don't sell your data. Ever.</li>
+    <li>We don't train AI models on your songs.</li>
+    <li>We don't share your uploads with anyone except the generation providers you choose (your lane, your call).</li>
+  </ul>
+
+  <h2>Cookies</h2>
+  <p>We use the bare minimum to keep you logged into your session. No ad trackers, no creepy pixels.</p>
+
+  <h2>Your rights</h2>
+  <p>Want your stuff deleted? Ask and it's gone — projects, uploads, everything. This is a test build, so data may also be wiped during rebuilds without warning.</p>
+
+  <h2>Contact</h2>
+  <p>Questions about privacy: reach out through the same channel you got your invite link from.</p>
+</div>
+{% endblock %}

@@ -337,6 +337,32 @@ def logo():
     return HTMLResponse("logo missing", status_code=404)
 
 
+def _simple_page(request: Request, template: str, title: str):
+    return templates.TemplateResponse(request, template, {
+        "request": request, "credits": get_credits(), "backend_ok": True,
+    })
+
+
+@app.get("/terms", response_class=HTMLResponse)
+def terms(request: Request):
+    return _simple_page(request, "terms.html", "Terms of Service")
+
+
+@app.get("/privacy", response_class=HTMLResponse)
+def privacy(request: Request):
+    return _simple_page(request, "privacy.html", "Privacy Policy")
+
+
+@app.get("/refunds", response_class=HTMLResponse)
+def refunds(request: Request):
+    return _simple_page(request, "refunds.html", "Refund Policy")
+
+
+@app.get("/faq", response_class=HTMLResponse)
+def faq(request: Request):
+    return _simple_page(request, "faq.html", "FAQ")
+
+
 @app.get("/project/{pid}/media")
 def project_media(pid: str, path: str = Query(...)):
     try:
