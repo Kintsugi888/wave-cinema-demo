@@ -2,5 +2,21 @@
   {
     "id": "wc_32117e80b984",
     "name": "LaneUITest"
+  },
+  {
+    "id": "wc_2dd8c9759fa9",
+    "name": "ffprobe-repro"
+  },
+  {
+    "id": "wc_c33b0ebdd52e",
+    "name": "nofprobe-repro"
+  },
+  {
+    "id": "wc_3a82a9485dd8",
+    "name": "m4a-e2e"
+  },
+  {
+    "id": "wc_40f43a4b8145",
+    "name": "neg-test"
   }
 ]

@@ -46,8 +46,8 @@
   <p><a class="btn" href="/project/{{ project.id }}?stage=direct">Continue to Direct &rarr;</a></p>
   {% else %}
   <form method="post" action="/project/{{ project.id }}/ingest" enctype="multipart/form-data">
-    <label class="field" for="song">Song file (MP3 or WAV)</label>
-    <input type="file" id="song" name="song" accept=".mp3,.wav,audio/mpeg,audio/wav" required
+    <label class="field" for="song">Song file (MP3, WAV, M4A, AAC, OGG or FLAC)</label>
+    <input type="file" id="song" name="song" accept=".mp3,.wav,.m4a,.aac,.ogg,.oga,.flac,audio/*" required
       {% if not backend_ok %}disabled{% endif %}>
 
     <label class="field">Rights statement <span class="mono subtle">{{ rights_version }}</span></label>

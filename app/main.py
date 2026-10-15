@@ -18,6 +18,9 @@ from fastapi.templating import Jinja2Templates
 
 from backend_client import Backend, bcall
 
+# Bundled ffmpeg on PATH (free hosts ship no system ffmpeg/ffprobe).
+from wavecinema import ffmpeg_bin  # noqa: F401  (import-time PATH fix)
+
 APP_DIR = Path(__file__).resolve().parent
 WC_ROOT = (APP_DIR / "..").resolve()
 DATA_DIR = APP_DIR / "data"
@@ -39,7 +42,7 @@ RIGHTS_TEXT = """WAVE CINEMA — RIGHTS STATEMENT (version wc-rights-v1.0, 2026-
 """
 
 MAX_UPLOAD_BYTES = 250 * 1024 * 1024
-ALLOWED_EXTS = {".mp3", ".wav"}
+ALLOWED_EXTS = {".mp3", ".wav", ".m4a", ".aac", ".ogg", ".oga", ".flac"}
 
 app = FastAPI(title="Wave Cinema", docs_url=None, redoc_url=None)
 app.mount("/static", StaticFiles(directory=str(APP_DIR / "static")), name="static")
@@ -423,7 +426,7 @@ async def ingest(pid: str, song: UploadFile = File(...), assent: Optional[str] =
     if ext not in ALLOWED_EXTS:
         ext_label = ext or "no extension"
         return RedirectResponse(
-            f"/project/{pid}?stage=ingest&err={_q('Only MP3/WAV accepted (got ' + ext_label + ').')}",
+            f"/project/{pid}?stage=ingest&err={_q('Audio format not accepted (got ' + ext_label + '). Try MP3, WAV, M4A, AAC, OGG or FLAC.')}",
             status_code=303)
     data = await song.read()
     if len(data) > MAX_UPLOAD_BYTES:
