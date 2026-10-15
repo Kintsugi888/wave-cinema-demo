@@ -35,10 +35,12 @@
       {% endif %}
       <span class="account-name">{{ user.name }}</span>
       <div class="account-dropdown">
+        <div class="account-dropdown-inner">
         <a href="/account">Account</a>
         <a href="/settings">Settings</a>
         <a href="/billing">Billing</a>
         <a href="/logout">Sign out</a>
+        </div>
       </div>
     </div>
     {% else %}
@@ -61,9 +63,10 @@
 .avatar{width:32px;height:32px;border-radius:50%;object-fit:cover}
 .account-name{color:#C5D0E0;font-size:14px;font-weight:600;max-width:120px;
   overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.account-dropdown{display:none;position:absolute;top:100%;right:0;margin-top:8px;
-  background:#0d1526;border:1px solid #1c2942;border-radius:10px;min-width:160px;
-  box-shadow:0 12px 32px rgba(0,0,0,.5);z-index:100}
+.account-dropdown{display:none;position:absolute;top:100%;right:0;padding-top:8px;
+  z-index:100}
+.account-dropdown-inner{background:#0d1526;border:1px solid #1c2942;border-radius:10px;min-width:160px;
+  box-shadow:0 12px 32px rgba(0,0,0,.5)}
 .account-menu:hover .account-dropdown{display:block}
 .account-dropdown a{display:block;padding:11px 16px;color:#C5D0E0;text-decoration:none;font-size:14px}
 .account-dropdown a:hover{background:#142B52;color:#F4F8FF}
