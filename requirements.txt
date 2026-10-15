@@ -6,3 +6,4 @@ pydantic==2.14.1
 stripe==16.0.0
 gradio==6.30.0
 imageio-ffmpeg==0.6.0
+cryptography==44.0.1
