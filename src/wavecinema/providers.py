@@ -30,13 +30,51 @@ ELECTRIC_BLUE = "0x1677FF"
 ICE_WHITE = "0xF4F8FF"
 
 
+# ------------------------------------------------------------- helpers
+
+MAX_REFERENCE_IMAGES = 9
+
+
+def _encode_reference_images(paths: list | None) -> list[dict]:
+    """Encode local reference images as data URIs for the generate call.
+
+    Capped at MAX_REFERENCE_IMAGES. Unreadable files are skipped, never
+    fatal — generation proceeds with the references that loaded.
+    """
+    import base64
+    refs: list[dict] = []
+    for p in (paths or [])[:MAX_REFERENCE_IMAGES]:
+        try:
+            data = Path(p).read_bytes()
+        except OSError:
+            continue
+        if not data or len(data) > 10 * 1024 * 1024:
+            continue
+        suffix = Path(str(p)).suffix.lower()
+        mime = {".jpg": "image/jpeg", ".jpeg": "image/jpeg",
+                ".png": "image/png", ".webp": "image/webp"}.get(suffix,
+                                                               "image/jpeg")
+        refs.append({
+            "filename": Path(str(p)).name,
+            "data_uri": f"data:{mime};base64,"
+                        f"{base64.b64encode(data).decode('ascii')}",
+        })
+    return refs
+
+
 class ProviderAdapter(ABC):
     """Interface for video-generation backends."""
 
     @abstractmethod
     def generate(self, scene: dict, prompt: str, duration_s: float,
-                 aspect: str = "16:9") -> str:
-        """Render a clip for a scene. Returns the local clip file path."""
+                 aspect: str = "16:9",
+                 reference_images: list | None = None) -> str:
+        """Render a clip for a scene. Returns the local clip file path.
+
+        reference_images: optional list of local image paths (character /
+        set consistency references). Providers that support them pass them
+        to the API; others ignore them.
+        """
         raise NotImplementedError
 
 
@@ -52,7 +90,8 @@ class MockProvider(ProviderAdapter):
         self.out_dir.mkdir(parents=True, exist_ok=True)
 
     def generate(self, scene: dict, prompt: str, duration_s: float,
-                 aspect: str = "16:9") -> str:
+                 aspect: str = "16:9",
+                 reference_images: list | None = None) -> str:
         if aspect != "16:9":
             raise ValueError(f"MockProvider renders 16:9 only, got {aspect!r}")
         if duration_s <= 0:
@@ -169,9 +208,15 @@ class HiggsfieldProvider(ProviderAdapter):
                 f"Higgsfield API HTTP {e.code} on {method} "
                 f"{url.split('api.higgsfield.ai')[-1] or '/'}: {body}")
 
-    def _submit(self, prompt: str, duration_s: int, aspect: str) -> tuple[str, str]:
-        body = {"prompt": prompt, "duration": duration_s,
-                "aspect_ratio": aspect}
+    def _submit(self, prompt: str, duration_s: int, aspect: str,
+                reference_images: list | None = None) -> tuple[str, str]:
+        body: dict = {"prompt": prompt, "duration": duration_s,
+                      "aspect_ratio": aspect}
+        refs = _encode_reference_images(reference_images)
+        if refs:
+            # Character / set consistency references (max 9). Field name per
+            # the provider contract; base64 data URIs since we hold local files.
+            body["reference_images"] = refs
         res = self._request("POST", f"{self.api_base}/{self.model}", body)
         request_id = res.get("request_id") or res.get("id")
         status_url = (res.get("status_url")
@@ -231,7 +276,8 @@ class HiggsfieldProvider(ProviderAdapter):
     # ------------------------------------------------------------- interface
 
     def generate(self, scene: dict, prompt: str, duration_s: float,
-                 aspect: str = "16:9") -> str:
+                 aspect: str = "16:9",
+                 reference_images: list | None = None) -> str:
         if aspect not in ("16:9", "9:16", "1:1"):
             raise ValueError(f"HiggsfieldProvider: unsupported aspect {aspect!r}")
         if duration_s <= 0:
@@ -239,7 +285,8 @@ class HiggsfieldProvider(ProviderAdapter):
         seconds = max(2, min(15, int(round(duration_s))))
         scene_id = scene.get("scene_id", "s??")
 
-        request_id, status_url = self._submit(prompt, seconds, aspect)
+        request_id, status_url = self._submit(prompt, seconds, aspect,
+                                              reference_images)
         video_url = self._poll(status_url)
 
         clip_name = f"{scene_id}-hf-{uuid.uuid4().hex[:6]}.mp4"
@@ -274,7 +321,8 @@ class RealProvider(ProviderAdapter):
     """
 
     def generate(self, scene: dict, prompt: str, duration_s: float,
-                 aspect: str = "16:9") -> str:
+                 aspect: str = "16:9",
+                 reference_images: list | None = None) -> str:
         raise NotImplementedError(
             "Real provider not configured — planned for MiniMax Hailuo-3-shaped "
             "API: 5-15s, 16:9/9:16/1:1, up to 9 reference images"

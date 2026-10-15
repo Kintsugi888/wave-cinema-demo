@@ -404,6 +404,22 @@ def _q(msg: str) -> str:
     return quote_plus(str(msg)[:500])
 
 
+def cast_view(pid: str, p: dict) -> list:
+    """Characters for the Cast panel: name + browser-usable image URL."""
+    raw = _g(p, "characters", default={}) or {}
+    views = []
+    for cid, c in raw.items():
+        if not isinstance(c, dict):
+            continue
+        views.append({
+            "character_id": str(_g(c, "character_id", "id", default=cid)),
+            "name": str(_g(c, "name", default=cid)),
+            "image_url": f"/project/{pid}/characters/{cid}/image",
+            "bytes": _g(c, "bytes", default=0),
+        })
+    return views
+
+
 @app.get("/project/{pid}", response_class=HTMLResponse)
 def project_page(request: Request,
                  pid: str,
@@ -422,19 +438,22 @@ def project_page(request: Request,
     scenes = scene_views(p) if active in ("direct", "review") else []
     ok_lane, lane_res = bcall(backend.get_provider_lane, pid)
     lane = lane_res if ok_lane and lane_res in ("byo", "cloud") else "byo"
-    ok_cloud, cloud_res = bcall(backend.cloud_available)
-    cloud = (cloud_res if ok_cloud and isinstance(cloud_res, dict)
-             else {"ok": False, "reason": "cloud status unavailable"})
-    if not cloud.get("ok"):
+    ok_auto, auto_res = bcall(backend.auto_generation_available)
+    auto = (auto_res if ok_auto and isinstance(auto_res, dict)
+            else {"ok": False, "key_source": "none",
+                  "reason": "status unavailable", "label": ""})
+    if not auto.get("ok"):
         # Keep the technical reason out of the UI; users just need the gist.
-        cloud = {"ok": False, "reason": "coming soon. DIY Clips works right now"}
+        auto = {**auto, "reason": "coming soon. DIY Clips works right now"}
     return templates.TemplateResponse(request, "project.html", ctx(
         error=err,
         project={"id": pid, "name": _g(p, "name", default=pid)},
         stages=stages,
         active_stage=active,
         lane=lane,
-        cloud=cloud,
+        cloud=auto,  # lane picker reads cloud.ok / cloud.reason / cloud.key_source
+        key_source=auto.get("key_source", "none"),
+        cast=cast_view(pid, p),
         song=song_view(p),
         bible=bible_text(p) if active == "direct" else None,
         scenes=scenes,
@@ -601,6 +620,102 @@ async def jobs_import(pid: str, clips: UploadFile = File(...)):
     else:
         msg = f"{n_in} clip(s) ready to review, {n_skip} file(s) skipped."
     return RedirectResponse(f"/project/{pid}?stage=review&status={_q(msg)}", status_code=303)
+
+
+# ------------------------------------------------- Cast (character references)
+
+MAX_CHAR_IMAGE_BYTES = 10 * 1024 * 1024
+CHAR_ALLOWED_EXTS = {".jpg", ".jpeg", ".png", ".webp"}
+
+
+@app.post("/project/{pid}/characters")
+async def character_add(pid: str, name: str = Form(...),
+                        image: UploadFile = File(...)):
+    ext = Path(image.filename or "").suffix.lower()
+    if ext not in CHAR_ALLOWED_EXTS:
+        return RedirectResponse(
+            f"/project/{pid}?stage=direct&err={_q('Reference image must be JPG or PNG.')}",
+            status_code=303)
+    data = await image.read()
+    if len(data) > MAX_CHAR_IMAGE_BYTES:
+        return RedirectResponse(
+            f"/project/{pid}?stage=direct&err={_q('That image is over 10 MB. Shrink it and try again.')}",
+            status_code=303)
+    ok, res = bcall(backend.add_character, pid, name, data,
+                    image.filename or "character.png")
+    if not ok:
+        return RedirectResponse(
+            f"/project/{pid}?stage=direct&err={_q(res)}", status_code=303)
+    return RedirectResponse(
+        f"/project/{pid}?stage=direct&status={_q('Character added to the cast.')}",
+        status_code=303)
+
+
+@app.post("/project/{pid}/characters/{cid}/delete")
+def character_delete(pid: str, cid: str):
+    ok, res = bcall(backend.remove_character, pid, cid)
+    if not ok:
+        return RedirectResponse(
+            f"/project/{pid}?stage=direct&err={_q(res)}", status_code=303)
+    return RedirectResponse(f"/project/{pid}?stage=direct", status_code=303)
+
+
+@app.get("/project/{pid}/characters/{cid}/image")
+def character_image(pid: str, cid: str):
+    ok, res = bcall(backend.character_image_path, pid, cid)
+    if not ok:
+        return RedirectResponse(f"/project/{pid}?stage=direct", status_code=303)
+    path = Path(str(res))
+    # containment: only serve files from inside this project's cast dir
+    try:
+        from wavecinema.workspace import project_dir as _pdir
+        cast_dir = _pdir(pid).resolve() / "cast"
+        if cast_dir not in path.resolve().parents and path.resolve() != cast_dir:
+            raise ValueError("path escapes cast dir")
+    except Exception:
+        return RedirectResponse(f"/project/{pid}?stage=direct", status_code=303)
+    if not path.is_file():
+        return RedirectResponse(f"/project/{pid}?stage=direct", status_code=303)
+    media = {".jpg": "image/jpeg", ".jpeg": "image/jpeg",
+             ".png": "image/png", ".webp": "image/webp"}.get(
+                 path.suffix.lower(), "image/jpeg")
+    return FileResponse(str(path), media_type=media)
+
+
+# ------------------------------------------------- Settings (BYOK)
+
+@app.get("/settings", response_class=HTMLResponse)
+def settings_page(request: Request,
+                  err: Optional[str] = Query(None),
+                  status: Optional[str] = Query(None)):
+    ok, st = bcall(backend.byok_status)
+    byok = st if ok and isinstance(st, dict) else {"set": False, "masked": None}
+    ok_auto, auto_res = bcall(backend.auto_generation_available)
+    auto = (auto_res if ok_auto and isinstance(auto_res, dict)
+            else {"ok": False, "key_source": "none", "label": ""})
+    return templates.TemplateResponse(request, "settings.html", ctx(
+        error=err,
+        notice=status,
+        byok=byok,
+        auto=auto,
+    ))
+
+
+@app.post("/settings/byok")
+def settings_byok_set(api_key: str = Form(...)):
+    ok, res = bcall(backend.byok_set_key, api_key)
+    if not ok:
+        return RedirectResponse(f"/settings?err={_q(res)}", status_code=303)
+    return RedirectResponse(
+        f"/settings?status={_q('Your key is saved (encrypted). Automatic generation will use your Higgsfield account — no credits.')}",
+        status_code=303)
+
+
+@app.post("/settings/byok/delete")
+def settings_byok_delete():
+    bcall(backend.byok_clear_key)
+    return RedirectResponse(
+        f"/settings?status={_q('Your key was removed.')}", status_code=303)
 
 
 # ------------------------------------------------------------------ paywall

@@ -16,6 +16,16 @@ from datetime import datetime, timedelta, timezone
 from .errors import QuoteExpired, SceneNotFound
 from .workspace import ProjectWorkspace
 
+
+def _key_source() -> str:
+    """'byok' when the user's own key is stored, else 'cloud'/'byo' lane logic.
+
+    Imported lazily to avoid a hard dependency cycle (byok only needs
+    workspace + cryptography).
+    """
+    from . import byok as _byok
+    return "byok" if _byok.status()["set"] else ""
+
 MODEL = "mock-v1"
 RESOLUTION = "1280x720"
 CURRENCY = "USD"
@@ -60,10 +70,19 @@ def quote_scene(project_id: str, scene_id: str) -> dict:
     billable_seconds, credits_total = price_for_duration_ms(duration_ms)
     lane = ws.state.get("provider_lane", "byo")
     model = MODEL
+    key_source = lane
     if lane == "cloud":
-        # Wave Cinema Cloud: our Higgsfield key, debited WITH margin.
-        credits_total = math.ceil(credits_total * CLOUD_MARGIN)
-        model = CLOUD_MODEL
+        if _key_source() == "byok":
+            # User's own key: their Higgsfield account is billed directly,
+            # Wave Cinema moves zero credits.
+            credits_total = 0
+            model = "byok/higgsfield"
+            key_source = "byok"
+        else:
+            # Wave Cinema Cloud: our Higgsfield key, debited WITH margin.
+            credits_total = math.ceil(credits_total * CLOUD_MARGIN)
+            model = CLOUD_MODEL
+            key_source = "cloud"
     now = _utcnow()
     quote = {
         "quote_id": "q_" + uuid.uuid4().hex[:12],
@@ -71,6 +90,7 @@ def quote_scene(project_id: str, scene_id: str) -> dict:
         "scene_id": scene_id,
         "model": model,
         "lane": lane,
+        "key_source": key_source,
         "resolution": RESOLUTION,
         "jobs": 1,
         "billable_seconds": billable_seconds,

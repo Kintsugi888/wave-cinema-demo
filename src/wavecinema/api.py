@@ -20,6 +20,8 @@ from __future__ import annotations
 from datetime import datetime, timezone
 
 from . import assemble as _assemble
+from . import byok as _byok
+from . import characters as _characters
 from . import cuts as _cuts
 from . import direct as _direct
 from . import export as _export
@@ -72,6 +74,35 @@ def cloud_available() -> dict:
     return _providers.cloud_available()
 
 
+def key_source() -> str:
+    """Which key automatic generation would use: 'byok', 'cloud', or 'none'.
+
+    'byok' = the user's own stored Higgsfield key (their account billed,
+    zero Wave Cinema credits). 'cloud' = our HIGGSFIELD_API_KEY (credits
+    billed with margin). 'none' = no automatic generation available.
+    """
+    if _byok.status()["set"]:
+        return "byok"
+    if _providers.cloud_available()["ok"]:
+        return "cloud"
+    return "none"
+
+
+def auto_generation_available() -> dict:
+    """Can automatic (non-DIY) generation run right now, and on whose key."""
+    source = key_source()
+    if source == "byok":
+        return {"ok": True, "key_source": "byok",
+                "reason": "",
+                "label": "Your key — your Higgsfield account, no credits"}
+    avail = _providers.cloud_available()
+    if avail["ok"]:
+        return {"ok": True, "key_source": "cloud", "reason": "",
+                "label": "Wave Cinema Cloud — our account, your credits"}
+    return {"ok": False, "key_source": "none",
+            "reason": avail["reason"], "label": ""}
+
+
 def get_provider_lane(project_id: str) -> str:
     """This project's generation lane ('byo' default)."""
     ws = _workspace.ProjectWorkspace.load(project_id)
@@ -80,12 +111,12 @@ def get_provider_lane(project_id: str) -> str:
 
 
 def set_provider_lane(project_id: str, lane: str) -> dict:
-    """Pick this project's generation lane. 'cloud' is refused unless the
-    cloud provider is explicitly enabled AND the key is present."""
+    """Pick this project's generation lane. 'cloud' is refused unless
+    automatic generation is available (our key enabled, or BYOK set)."""
     if lane not in LANES:
         raise ValueError(f"unknown lane {lane!r} (expected one of {LANES})")
     if lane == "cloud":
-        avail = _providers.cloud_available()
+        avail = auto_generation_available()
         if not avail["ok"]:
             raise RuntimeError(
                 f"cloud lane unavailable: {avail['reason']}")
@@ -110,6 +141,10 @@ def _provider_for_project(project_id: str) -> "_providers.ProviderAdapter":
     if _provider is not None:
         return _provider
     if get_provider_lane(project_id) == "cloud":
+        byok_key = _byok.get_key()
+        if byok_key:
+            return _providers.HiggsfieldProvider(
+                _workspace.DATA_DIR / "hf_clips", api_key=byok_key)
         return _providers.HiggsfieldProvider(
             _workspace.DATA_DIR / "hf_clips")
     return _providers.MockProvider(
@@ -181,7 +216,12 @@ def quote_scene(project_id: str, scene_id: str) -> dict:
 
 
 def approve_quote(project_id: str, quote_id: str) -> dict:
-    """Approve a quote: creates a ledger hold for the exact quoted amount."""
+    """Approve a quote: creates a ledger hold for the exact quoted amount.
+
+    BYOK quotes (user's own key) move no credits: no hold is created and
+    hold_id stays None. If the key source changed since quoting, the caller
+    must re-quote — silently switching billing would be a nasty surprise.
+    """
     ws = _workspace.ProjectWorkspace.load(project_id)
     quote = ws.state["quotes"].get(quote_id)
     if quote is None:
@@ -193,20 +233,34 @@ def approve_quote(project_id: str, quote_id: str) -> dict:
     if datetime.fromisoformat(quote["expires_at"]) <= datetime.now(timezone.utc):
         raise QuoteExpired(f"quote {quote_id} expired at {quote['expires_at']}")
 
-    hold = _ledger.Ledger().hold(
-        DEFAULT_ACCOUNT,
-        quote["credits_total"],
-        idempotency_key=f"quote:{quote_id}",
-        memo=f"quote {quote_id} scene {quote['scene_id']} project {project_id}",
-    )
+    quoted_source = quote.get("key_source") or quote.get("lane", "byo")
+    current_source = key_source() if quote.get("lane") == "cloud" else "byo"
+    if quoted_source != current_source:
+        raise WaveCinemaError(
+            f"key source changed since quoting ({quoted_source} -> "
+            f"{current_source}); please re-quote this scene"
+        )
+
+    hold_id = None
+    if quoted_source == "byok":
+        ws.log_event(f"approved BYOK quote {quote_id}: no hold, no credits")
+    else:
+        hold = _ledger.Ledger().hold(
+            DEFAULT_ACCOUNT,
+            quote["credits_total"],
+            idempotency_key=f"quote:{quote_id}",
+            memo=f"quote {quote_id} scene {quote['scene_id']} project {project_id}",
+        )
+        hold_id = hold["id"]
     rev = ws.revision
     quote["status"] = "approved"
-    quote["hold_id"] = hold["id"]
+    quote["hold_id"] = hold_id
     quote["approved_at"] = datetime.now(timezone.utc).isoformat()
     ws.state["quotes"][quote_id] = quote
     ws.log_event(
-        f"approved quote {quote_id}: hold {hold['id']} "
-        f"({quote['credits_total']} credits)"
+        f"approved quote {quote_id}: "
+        + (f"hold {hold_id} ({quote['credits_total']} credits)"
+           if hold_id is not None else "BYOK, zero credits")
     )
     ws.save(expected_revision=rev)
     return dict(quote)
@@ -291,19 +345,30 @@ def generate_scene(project_id: str, scene_id: str,
     ws.save(expected_revision=rev)
 
     ledger = _ledger.Ledger()
+    hold_id = quote.get("hold_id")
     try:
         clip_path = _provider_for_project(project_id).generate(
             scene, scene["prompt"],
             duration_s=(scene["end_ms"] - scene["start_ms"]) / 1000.0,
             aspect="16:9",
+            reference_images=_characters.character_reference_paths(project_id),
         )
         take = _takes.register_take(
             project_id, scene_id, clip_path,
             quote_id=quote["quote_id"], job_idempotency_key=idempotency_key,
         )
-        debit = ledger.capture(quote["hold_id"])
+        if hold_id is not None:
+            debit = ledger.capture(hold_id)
+            credits_spent = debit["credits"]
+            debit_id = debit["id"]
+        else:
+            # BYOK: the user's own key was billed by their provider; we
+            # move zero credits.
+            credits_spent = 0
+            debit_id = None
     except Exception as exc:  # noqa: BLE001 — must release the hold on ANY failure
-        ledger.release(quote["hold_id"])
+        if hold_id is not None:
+            ledger.release(hold_id)
         ws = _workspace.ProjectWorkspace.load(project_id)
         rev = ws.revision
         ws.state["jobs"][idempotency_key]["status"] = "failed"
@@ -317,8 +382,8 @@ def generate_scene(project_id: str, scene_id: str,
         "scene_id": scene_id,
         "take_id": take["take_id"],
         "take_sha256": take["sha256"],
-        "debit_id": debit["id"],
-        "credits_spent": debit["credits"],
+        "debit_id": debit_id,
+        "credits_spent": credits_spent,
         "status": "done",
     }
     ws = _workspace.ProjectWorkspace.load(project_id)
@@ -327,7 +392,7 @@ def generate_scene(project_id: str, scene_id: str,
     ws.state["jobs"][idempotency_key]["result"] = result
     ws.log_event(
         f"job {idempotency_key} done: take {take['take_id']}, "
-        f"debited {debit['credits']} credits"
+        f"debited {credits_spent} credits"
     )
     ws.save(expected_revision=rev)
     return result
@@ -385,6 +450,46 @@ def import_job_clips(project_id: str, zip_bytes: bytes) -> dict:
     return _jobpack.import_clips_zip(project_id, zip_bytes)
 
 
+# ---------------------------------------------------------------- cast
+
+def add_character(project_id: str, name: str, image_bytes: bytes,
+                  filename: str) -> dict:
+    """Add a named character with a reference image to the project."""
+    return _characters.add_character(project_id, name, image_bytes, filename)
+
+
+def list_characters(project_id: str) -> list:
+    """All characters in the project, oldest first."""
+    return _characters.list_characters(project_id)
+
+
+def remove_character(project_id: str, character_id: str) -> dict:
+    """Delete a character and its reference image."""
+    return _characters.remove_character(project_id, character_id)
+
+
+def character_image_path(project_id: str, character_id: str) -> str:
+    """Absolute path of a character's reference image (validated)."""
+    return str(_characters.character_image_path(project_id, character_id))
+
+
+# ---------------------------------------------------------------- BYOK
+
+def byok_status() -> dict:
+    """{"set": bool, "masked": str|None} — never exposes the key."""
+    return _byok.status()
+
+
+def byok_set_key(api_key: str) -> dict:
+    """Encrypt and store the user's own generation API key."""
+    return _byok.set_key(api_key)
+
+
+def byok_clear_key() -> dict:
+    """Remove the stored BYOK key."""
+    return _byok.clear_key()
+
+
 # ---------------------------------------------------------------- credits
 
 def credit_balance(account_id: str = DEFAULT_ACCOUNT) -> int:
@@ -424,4 +529,8 @@ __all__ = [
     "set_provider", "get_provider",
     "export_job_pack", "import_job_clips",
     "get_provider_lane", "set_provider_lane", "cloud_available",
+    "key_source", "auto_generation_available",
+    "add_character", "list_characters", "remove_character",
+    "character_image_path",
+    "byok_status", "byok_set_key", "byok_clear_key",
 ]

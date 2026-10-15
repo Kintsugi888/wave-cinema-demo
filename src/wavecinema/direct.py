@@ -113,10 +113,12 @@ class DeterministicDirector:
     always yield identical outputs.
     """
 
-    def __init__(self, treatment: str, cue_sheet: dict, scenes: list[dict]):
+    def __init__(self, treatment: str, cue_sheet: dict, scenes: list[dict],
+                 characters: list[dict] | None = None):
         self.treatment = treatment
         self.cue_sheet = cue_sheet
         self.scenes = scenes
+        self.characters = list(characters or [])
         self.rng = _rng(treatment or "")
 
     # -- bible ---------------------------------------------------------
@@ -155,6 +157,19 @@ class DeterministicDirector:
         return bible
 
     # -- timed plan ----------------------------------------------------
+    def _cast_reference_line(self) -> str:
+        """Character-consistency line from uploaded reference images."""
+        if not self.characters:
+            return ""
+        names = ", ".join(c.get("name", "?") for c in self.characters)
+        return (
+            f"CHARACTER REFERENCES: the cast ({names}) has uploaded reference "
+            f"images — match each named character's face, hair, eyes, skin tone "
+            f"and wardrobe to their reference EXACTLY in every shot. No "
+            f"morphing between references; the same character looks identical "
+            f"across all scenes. "
+        )
+
     def _prompt_for(self, bible: dict, scene: dict, index: int) -> str:
         words = _words_in_scene(self.cue_sheet, scene)
         cast = _scene_cast(self.cue_sheet, scene)
@@ -185,6 +200,7 @@ class DeterministicDirector:
             f"VISUAL LANGUAGE: {bible['visual_language']}. "
             f"STORY BEAT: {beat} "
             f"CAST ON SCREEN: {', '.join(cast)}. "
+            f"{self._cast_reference_line()}"
             f"IDENTITY LOCKS (must hold exactly): {locks} "
             f"CAMERA: {move}. "
             f"{lyric_line}"
@@ -240,7 +256,9 @@ def direct_project(project_id: str, treatment: str,
         raise SceneNotFound(f"project {project_id} has no cut plan — plan cuts first")
     if ws.state.get("cue_sheet") is None:
         raise ValueError(f"project {project_id} has no cue sheet — transcribe first")
-    director = director_cls(treatment, ws.state["cue_sheet"], ws.state["scenes"])
+    characters = list((ws.state.get("characters") or {}).values())
+    director = director_cls(treatment, ws.state["cue_sheet"], ws.state["scenes"],
+                            characters=characters)
     bible, plan = director.plan()
     rev = ws.revision
     ws.state["bible"] = bible

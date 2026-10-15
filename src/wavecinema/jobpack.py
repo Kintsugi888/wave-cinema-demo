@@ -9,6 +9,7 @@ Pack layout:
     pack.json                 # project + per-scene timing/cast/prompts
     prompts/scene_00.txt …    # full prompt text per scene
     stills/…                  # any scene stills found in the project dir (optional)
+    cast/<character_id>.jpg   # character reference images (optional)
     README.txt                # instructions for the generating friend
 
 Clip zip layout (uploaded back):
@@ -26,6 +27,7 @@ import zipfile
 from datetime import datetime, timezone
 from pathlib import Path
 
+from . import characters as _characters
 from .errors import SceneNotFound
 from .takes import register_take
 from .workspace import ProjectWorkspace, project_dir
@@ -46,8 +48,10 @@ HOW TO GENERATE
 2. Keep every clip 16:9, 24 fps if you can. Length per scene is in
    pack.json (duration_ms). A little over is fine; the edit trims.
 3. Character identity is non-negotiable: match the identity locks stated
-   in each prompt exactly (hair, eyes, skin, wardrobe). No text, logos
-   or watermarks in frame. No morphing between poses.
+   in each prompt exactly (hair, eyes, skin, wardrobe). If cast/ holds
+   reference images, match each named character to their photo exactly —
+   same face in every scene. No text, logos or watermarks in frame.
+   No morphing between poses.
 
 HOW TO SEND BACK
 4. Name your clips scene_00.mp4, scene_01.mp4, … matching the prompt
@@ -119,6 +123,11 @@ def build_pack(project_id: str) -> Path:
         "rights_statement": (ws.state.get("rights") or {}).get("statement_version"),
         "scene_count": len(pack_scenes),
         "scenes": pack_scenes,
+        "characters": [
+            {"character_id": c["character_id"], "name": c["name"],
+             "file": f"cast/{c['filename']}"}
+            for c in _characters.list_characters(project_id)
+        ],
     }
 
     ts = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S")
@@ -131,6 +140,13 @@ def build_pack(project_id: str) -> Path:
             z.writestr(name, text)
         for still in _find_stills(pdir):
             z.write(still, f"stills/{still.name}")
+        for c in _characters.list_characters(project_id):
+            try:
+                img = _characters.character_image_path(
+                    project_id, c["character_id"])
+            except Exception:
+                continue
+            z.write(img, f"cast/{c['filename']}")
 
     rev = ws.revision
     ws.log_event(f"BYO job pack built: {out.name} ({len(pack_scenes)} scenes)")

@@ -43,6 +43,7 @@ def _new_workspace(project_id: str, name: str) -> dict:
         "rights": {"statement_version": None, "assented": False, "assented_at": None},
         "song": None,            # {filename, ext, bytes, sha256, duration_ms}
         "cue_sheet": None,       # {words, phrases, generated_by, ...}
+        "characters": {},        # character_id -> {name, filename, ext, bytes, sha256, created_at}
         "scenes": [],            # cut plan: [{scene_id, start_ms, end_ms, duration_ms, ...}]
         "bible": None,           # production bible JSON
         "plan": None,            # timed plan JSON {schema_version, scenes:[{scene_id,...prompt}]}

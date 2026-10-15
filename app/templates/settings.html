@@ -1,0 +1,37 @@
+{% extends "base.html" %}
+{% block title %}Settings{% endblock %}
+{% block content %}
+<p><a href="/">&larr; Dashboard</a></p>
+<h1>Settings</h1>
+
+<div class="panel">
+  <h2>Your generation key</h2>
+  {% if byok.set %}
+  <p>A key is saved: <span class="mono">{{ byok.masked }}</span></p>
+  <p class="hint">Automatic generation uses <strong>your</strong> Higgsfield account — you pay them directly, Wave Cinema moves zero credits. The key is encrypted on our server and never shown.</p>
+  <form method="post" action="/settings/byok/delete"
+        onsubmit="return confirm('Remove your key? Automatic generation will fall back to Wave Cinema Cloud (credits).');">
+    <p><input type="submit" class="danger" value="Remove my key"></p>
+  </form>
+  {% else %}
+  <p class="subtle">No key saved. Paste your Higgsfield API key to generate on your own account — fully automatic, no credits, no clip zips.</p>
+  <form method="post" action="/settings/byok">
+    <label class="field" for="api_key">Higgsfield API key</label>
+    <input type="password" id="api_key" name="api_key" placeholder="key_id:key_secret"
+      required autocomplete="off" {% if not backend_ok %}disabled{% endif %}>
+    <p class="hint">Find it in your Higgsfield dashboard under API keys. Stored encrypted, never displayed, never logged.</p>
+    <p><input type="submit" class="primary" value="Save my key" {% if not backend_ok %}disabled{% endif %}></p>
+  </form>
+  {% endif %}
+</div>
+
+<div class="panel">
+  <h2>How generation is billed right now</h2>
+  {% if auto.ok %}
+  <p>{{ auto.label }}</p>
+  {% else %}
+  <p class="subtle">Automatic generation is unavailable: {{ auto.reason }}</p>
+  {% endif %}
+  <p class="hint">DIY Clips is always free — you generate on your own account and upload the clips back.</p>
+</div>
+{% endblock %}

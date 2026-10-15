@@ -15,12 +15,21 @@
     </label>
     <label class="lane-option {% if not cloud.ok %}lane-off{% endif %}">
       <input type="radio" name="lane" value="cloud" {% if lane == "cloud" %}checked{% endif %} {% if not cloud.ok %}disabled{% endif %}>
-      <span><strong>Wave Cinema Cloud</strong><br>
-      <span class="subtle">We generate on our account, using your credits.</span>
+      <span><strong>Automatic generation</strong><br>
+      {% if cloud.key_source == "byok" %}
+      <span class="subtle">Your Higgsfield key — your account pays, zero credits.</span>
+      {% elif cloud.key_source == "cloud" %}
+      <span class="subtle">Wave Cinema Cloud — we generate, your credits.</span>
+      {% endif %}
       {% if not cloud.ok %}<br><span class="subtle">Unavailable: {{ cloud.reason }}</span>{% endif %}</span>
     </label>
     <p><input type="submit" class="primary" value="Lock it in"></p>
   </form>
+  {% if cloud.key_source == "byok" %}
+  <p class="hint">Using your key — <a href="/settings">manage in Settings</a>.</p>
+  {% elif cloud.ok %}
+  <p class="hint">Using Wave Cinema Cloud (credits). Got your own Higgsfield key? <a href="/settings">Connect it</a> and skip credits.</p>
+  {% endif %}
 </div>
 
 <nav class="stepper" aria-label="Pipeline stages">
@@ -68,6 +77,38 @@
 {% if active_stage == "direct" %}
 <div class="panel">
   <h2>02 · Direct the Film</h2>
+
+  <h3>The Cast</h3>
+  <p class="hint">Upload reference photos for your characters. The director writes them into every shot, and generation matches them — same face, every scene.</p>
+  {% if cast %}
+  <div class="grid cols-3">
+    {% for c in cast %}
+    <div class="card take">
+      <img src="{{ c.image_url }}" alt="{{ c.name }}" style="width:100%;aspect-ratio:1;object-fit:cover;border-radius:8px">
+      <div class="meta"><strong>{{ c.name }}</strong></div>
+      <div class="actions">
+        <form method="post" action="/project/{{ project.id }}/characters/{{ c.character_id }}/delete"
+              onsubmit="return confirm('Remove {{ c.name }} from the cast?');">
+          <button type="submit" class="danger">Remove</button>
+        </form>
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+  {% else %}
+  <p class="subtle">No characters yet — the film will use the default look.</p>
+  {% endif %}
+  {% if cast|length < 10 %}
+  <form method="post" action="/project/{{ project.id }}/characters" enctype="multipart/form-data" style="margin-top:12px">
+    <label class="field" for="charname">Character name</label>
+    <input type="text" id="charname" name="name" placeholder="e.g. Shamz" required maxlength="80" {% if not backend_ok %}disabled{% endif %}>
+    <label class="field" for="charimage">Reference photo (JPG/PNG, max 10 MB)</label>
+    <input type="file" id="charimage" name="image" accept=".jpg,.jpeg,.png,.webp,image/*" required {% if not backend_ok %}disabled{% endif %}>
+    <p><input type="submit" class="primary" value="Add to cast" {% if not backend_ok %}disabled{% endif %}></p>
+  </form>
+  {% endif %}
+  <hr class="divider">
+
   {% if not song %}
   <p class="subtle">Drop your track first.</p>
   <p><a class="btn" href="/project/{{ project.id }}?stage=ingest">Go drop it</a></p>
@@ -179,7 +220,7 @@
         </form>
         {% endif %}
         <form method="post" action="/project/{{ project.id }}/reroll"
-              onsubmit="return confirm('Reroll starts a NEW PAID generation: fresh price, fresh charge. Continue?');">
+              onsubmit="return confirm('{% if key_source == "byok" %}Reroll starts a NEW generation on your key (no credits, your Higgsfield account). Continue?{% else %}Reroll starts a NEW PAID generation: fresh price, fresh charge. Continue?{% endif %}');">
           <input type="hidden" name="scene_id" value="{{ sc.id }}">
           <button type="submit" class="danger">Reroll</button>
         </form>
