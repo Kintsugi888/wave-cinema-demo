@@ -114,11 +114,13 @@ class DeterministicDirector:
     """
 
     def __init__(self, treatment: str, cue_sheet: dict, scenes: list[dict],
-                 characters: list[dict] | None = None):
+                 characters: list[dict] | None = None,
+                 backgrounds: list[dict] | None = None):
         self.treatment = treatment
         self.cue_sheet = cue_sheet
         self.scenes = scenes
         self.characters = list(characters or [])
+        self.backgrounds = list(backgrounds or [])
         self.rng = _rng(treatment or "")
 
     # -- bible ---------------------------------------------------------
@@ -170,6 +172,20 @@ class DeterministicDirector:
             f"across all scenes. "
         )
 
+    def _location_reference_line(self) -> str:
+        """Environment-consistency line from uploaded background references."""
+        if not self.backgrounds:
+            return ""
+        names = ", ".join(b.get("name", "?") for b in self.backgrounds)
+        return (
+            f"LOCATION REFERENCES: the production ({names}) has uploaded "
+            f"environment reference images — match each named location's "
+            f"architecture, lighting mood, palette and key set dressing to "
+            f"its reference EXACTLY in every shot set there. No morphing "
+            f"between references; the same location looks identical across "
+            f"all scenes. "
+        )
+
     def _prompt_for(self, bible: dict, scene: dict, index: int) -> str:
         words = _words_in_scene(self.cue_sheet, scene)
         cast = _scene_cast(self.cue_sheet, scene)
@@ -200,7 +216,7 @@ class DeterministicDirector:
             f"VISUAL LANGUAGE: {bible['visual_language']}. "
             f"STORY BEAT: {beat} "
             f"CAST ON SCREEN: {', '.join(cast)}. "
-            f"{self._cast_reference_line()}"
+            f"{self._cast_reference_line()}"f"{self._location_reference_line()}"
             f"IDENTITY LOCKS (must hold exactly): {locks} "
             f"CAMERA: {move}. "
             f"{lyric_line}"
@@ -257,8 +273,9 @@ def direct_project(project_id: str, treatment: str,
     if ws.state.get("cue_sheet") is None:
         raise ValueError(f"project {project_id} has no cue sheet — transcribe first")
     characters = list((ws.state.get("characters") or {}).values())
+    backgrounds = list((ws.state.get("backgrounds") or {}).values())
     director = director_cls(treatment, ws.state["cue_sheet"], ws.state["scenes"],
-                            characters=characters)
+                            characters=characters, backgrounds=backgrounds)
     bible, plan = director.plan()
     rev = ws.revision
     ws.state["bible"] = bible

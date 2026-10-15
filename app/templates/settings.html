@@ -34,4 +34,27 @@
   {% endif %}
   <p class="hint">DIY Clips is always free — you generate on your own account and upload the clips back.</p>
 </div>
+
+<div class="panel">
+  <h2>Gemini API key <span class="subtle">(Nano Banana image generation)</span></h2>
+  {% if gemini.set %}
+  <p>A key is saved: <span class="mono">{{ gemini.masked }}</span>{% if gemini.source %} <span class="subtle">({{ gemini.source }})</span>{% endif %}</p>
+  <p class="hint">Powers the character sheet generator and background generator. Free and unlimited via Google AI Studio.</p>
+  {% if gemini.source == "settings" %}
+  <form method="post" action="/settings/gemini/delete"
+        onsubmit="return confirm('Remove your Gemini key? Sheet/background generation will be disabled.');">
+    <p><input type="submit" class="danger" value="Remove Gemini key"></p>
+  </form>
+  {% endif %}
+  {% else %}
+  <p class="subtle">No key saved. Add a free Gemini API key to generate character reference sheets and environment backgrounds with Nano Banana.</p>
+  <form method="post" action="/settings/gemini">
+    <label class="field" for="gemini_key">Gemini API key</label>
+    <input type="password" id="gemini_key" name="api_key" placeholder="AIza…"
+      required autocomplete="off" {% if not backend_ok %}disabled{% endif %}>
+    <p class="hint">Get a free key at <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener">aistudio.google.com/apikey</a> — no card required. Stored encrypted, never displayed.</p>
+    <p><input type="submit" class="primary" value="Save Gemini key" {% if not backend_ok %}disabled{% endif %}></p>
+  </form>
+  {% endif %}
+</div>
 {% endblock %}

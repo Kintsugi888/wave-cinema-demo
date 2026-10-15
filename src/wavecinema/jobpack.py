@@ -10,6 +10,7 @@ Pack layout:
     prompts/scene_00.txt …    # full prompt text per scene
     stills/…                  # any scene stills found in the project dir (optional)
     cast/<character_id>.jpg   # character reference images (optional)
+    backgrounds/<bg_id>.jpg  # environment reference images (optional)
     README.txt                # instructions for the generating friend
 
 Clip zip layout (uploaded back):
@@ -28,6 +29,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from . import characters as _characters
+from . import backgrounds as _backgrounds
 from .errors import SceneNotFound
 from .takes import register_take
 from .workspace import ProjectWorkspace, project_dir
@@ -52,6 +54,7 @@ HOW TO GENERATE
 3. Character identity is non-negotiable: match the identity locks stated
    in each prompt exactly (hair, eyes, skin, wardrobe). If cast/ holds
    reference images, match each named character to their photo exactly —
+   and match each named location in backgrounds/ to its photo exactly.
    same face in every scene. No text, logos or watermarks in frame.
    No morphing between poses.
 
@@ -140,6 +143,11 @@ def build_pack(project_id: str) -> Path:
              "file": f"cast/{c['filename']}"}
             for c in _characters.list_characters(project_id)
         ],
+        "backgrounds": [
+            {"background_id": b["background_id"], "name": b["name"],
+             "file": f"backgrounds/{b['filename']}"}
+            for b in _backgrounds.list_backgrounds(project_id)
+        ],
     }
 
     ts = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S")
@@ -159,6 +167,13 @@ def build_pack(project_id: str) -> Path:
             except Exception:
                 continue
             z.write(img, f"cast/{c['filename']}")
+        for b in _backgrounds.list_backgrounds(project_id):
+            try:
+                img = _backgrounds.background_image_path(
+                    project_id, b["background_id"])
+            except Exception:
+                continue
+            z.write(img, f"backgrounds/{b['filename']}")
 
     rev = ws.revision
     ws.log_event(f"BYO job pack built: {out.name} ({len(pack_scenes)} scenes)")

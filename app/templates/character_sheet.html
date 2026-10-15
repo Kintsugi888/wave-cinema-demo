@@ -1,0 +1,82 @@
+{% extends "base.html" %}
+{% block title %}Generate references — {{ project.name }}{% endblock %}
+{% block content %}
+<div class="page-head">
+  <h1>✨ Reference Generator</h1>
+  <p class="subtle">Nano Banana (Gemini 2.5 Flash Image) — free, unlimited. Sheets auto-save to your cast; backgrounds auto-save to locations.</p>
+  <p><a href="/project/{{ project.id }}?stage=direct">← Back to {{ project.name }}</a></p>
+</div>
+
+{% if error %}<p class="alert error">{{ error }}</p>{% endif %}
+{% if notice %}<p class="alert ok">{{ notice }}</p>{% endif %}
+
+{% if not gemini.set %}
+<div class="panel">
+  <h2>🔑 Add your Gemini API key first</h2>
+  <p>Generation needs a free Gemini API key. <a href="/settings">Add it in Settings →</a></p>
+  <p class="subtle">Get a free key at <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener">aistudio.google.com/apikey</a> — no card required.</p>
+</div>
+{% else %}
+
+<div class="tabs">
+  <a href="/project/{{ project.id }}/character-sheet?tab=character" class="tab{% if tab == 'character' %} active{% endif %}">Character sheet</a>
+  <a href="/project/{{ project.id }}/character-sheet?tab=background" class="tab{% if tab == 'background' %} active{% endif %}">Background</a>
+</div>
+
+{% if tab == 'character' %}
+<div class="panel">
+  <h2>Character reference sheet</h2>
+  <p class="hint">Generates a model sheet: front / side / back full-body views plus 4 expression close-ups. Saved straight into your cast.</p>
+  <form method="post" action="/project/{{ project.id }}/character-sheet">
+    <label class="field" for="csname">Character name</label>
+    <input type="text" id="csname" name="name" required maxlength="80" placeholder="e.g. Shamz" class="auth-input">
+    <label class="field" for="csdesc">Describe the character</label>
+    <textarea id="csdesc" name="description" required rows="4" class="auth-input" placeholder="Appearance, age, build, hair, eyes, skin tone, outfit, distinctive features…"></textarea>
+    <label class="field" for="csstyle">Art style</label>
+    <select id="csstyle" name="style" class="auth-input">
+      {% for key, label in styles.items() %}
+      <option value="{{ key }}">{{ label }}</option>
+      {% endfor %}
+    </select>
+    <p><input type="submit" class="primary" value="Generate sheet (~30–60s)"></p>
+  </form>
+  {% if recent %}
+  <h3>Recently added to cast</h3>
+  <div class="grid cols-4">
+    {% for c in recent %}
+    <div class="card take">
+      <img src="/project/{{ project.id }}/characters/{{ c.character_id }}/image" alt="{{ c.name }}" style="width:100%;aspect-ratio:1;object-fit:cover;border-radius:8px">
+      <div class="meta"><strong>{{ c.name }}</strong></div>
+    </div>
+    {% endfor %}
+  </div>
+  {% endif %}
+</div>
+{% else %}
+<div class="panel">
+  <h2>Generate background</h2>
+  <p class="hint">Generates a cinematic environment backplate — no characters. Saved straight into Locations &amp; Backgrounds.</p>
+  <form method="post" action="/project/{{ project.id }}/character-sheet/background">
+    <label class="field" for="bggen-name">Location name</label>
+    <input type="text" id="bggen-name" name="name" required maxlength="80" placeholder="e.g. Neon Rooftop" class="auth-input">
+    <label class="field" for="bggen-desc">Describe the environment</label>
+    <textarea id="bggen-desc" name="description" required rows="4" class="auth-input" placeholder="Setting, time of day, architecture, lighting mood, palette, key details…"></textarea>
+    <p><input type="submit" class="primary" value="Generate background (~30–60s)"></p>
+  </form>
+</div>
+{% endif %}
+{% endif %}
+
+<style>
+.tabs{display:flex;gap:8px;margin:16px 0}
+.tab{padding:10px 20px;border-radius:10px;background:#0d1526;border:1px solid #1c2942;color:#C5D0E0;text-decoration:none;font-weight:600}
+.tab.active{background:#1677FF;border-color:#1677FF;color:#fff}
+.auth-input{width:100%;box-sizing:border-box;padding:12px 14px;margin-bottom:12px;border-radius:10px;background:#080D18;border:1px solid #24406e;color:#F4F8FF;font-size:15px;font-family:inherit}
+.auth-input:focus{outline:none;border-color:#1677FF}
+select.auth-input{appearance:auto}
+.field{display:block;margin-bottom:8px;color:#C5D0E0;font-size:14px;font-weight:600}
+.alert{padding:12px 16px;border-radius:10px;margin:12px 0}
+.alert.error{background:#3a1420;border:1px solid #E63946;color:#ffb3ba}
+.alert.ok{background:#0f2f1d;border:1px solid #2ea043;color:#a9e5c0}
+</style>
+{% endblock %}

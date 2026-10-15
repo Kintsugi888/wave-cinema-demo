@@ -142,6 +142,40 @@
   {% endif %}
   <hr class="divider">
 
+  <h3>Locations &amp; Backgrounds</h3>
+  <p class="hint">Upload reference images for your locations and environments. The director writes them into every shot, and generation matches them — same place, every scene. <a href="/project/{{ project.id }}/character-sheet?tab=background">Or generate one with Nano Banana →</a></p>
+  {% if backgrounds %}
+  <div class="grid cols-3">
+    {% for b in backgrounds %}
+    <div class="card take">
+      <img src="{{ b.image_url }}" alt="{{ b.name }}" style="width:100%;aspect-ratio:16/9;object-fit:cover;border-radius:8px">
+      <div class="meta"><strong>{{ b.name }}</strong></div>
+      <div class="actions">
+        <form method="post" action="/project/{{ project.id }}/backgrounds/{{ b.background_id }}/delete"
+              onsubmit="return confirm('Remove {{ b.name }}?');">
+          <button type="submit" class="danger">Remove</button>
+        </form>
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+  {% else %}
+  <p class="subtle">No backgrounds yet — the film will use the default look.</p>
+  {% endif %}
+  {% if backgrounds|length < 10 %}
+  <form method="post" action="/project/{{ project.id }}/backgrounds" enctype="multipart/form-data" style="margin-top:12px">
+    <label class="field" for="bgname">Location name</label>
+    <input type="text" id="bgname" name="name" placeholder="e.g. Neon Rooftop" required maxlength="80" {% if not backend_ok %}disabled{% endif %}>
+    <label class="field" for="bgimage">Reference image (JPG/PNG, max 10 MB)</label>
+    <input type="file" id="bgimage" name="image" accept=".jpg,.jpeg,.png,.webp,image/*" required {% if not backend_ok %}disabled{% endif %}>
+    <p><input type="submit" class="primary" value="Add background" {% if not backend_ok %}disabled{% endif %}></p>
+  </form>
+  {% endif %}
+  <hr class="divider">
+
+  <p style="margin-top:12px"><a class="auth-btn" href="/project/{{ project.id }}/character-sheet" style="max-width:320px">✨ Generate character sheets &amp; backgrounds</a></p>
+  <hr class="divider">
+
   {% if not song %}
   <p class="subtle">Drop your track first.</p>
   <p><a class="btn" href="/project/{{ project.id }}?stage=ingest">Go drop it</a></p>

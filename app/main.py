@@ -624,6 +624,22 @@ def cast_view(pid: str, p: dict) -> list:
     return views
 
 
+def backgrounds_view(pid: str, p: dict) -> list:
+    """Backgrounds for the Locations panel: name + browser-usable image URL."""
+    raw = _g(p, "backgrounds", default={}) or {}
+    views = []
+    for bid, b in raw.items():
+        if not isinstance(b, dict):
+            continue
+        views.append({
+            "background_id": str(_g(b, "background_id", "id", default=bid)),
+            "name": str(_g(b, "name", default=bid)),
+            "image_url": f"/project/{pid}/backgrounds/{bid}/image",
+            "bytes": _g(b, "bytes", default=0),
+        })
+    return views
+
+
 @app.get("/project/{pid}", response_class=HTMLResponse)
 def _check_owner(pid: str, p: dict, user: dict) -> Optional[str]:
     """Return an error message if the user may not access this project."""
@@ -685,6 +701,7 @@ def project_page(request: Request,
         cloud=auto,  # lane picker reads cloud.ok / cloud.reason / cloud.key_source
         key_source=auto.get("key_source", "none"),
         cast=cast_view(pid, p),
+        backgrounds=backgrounds_view(pid, p),
         song=song_view(p),
         bible=bible_text(p) if active == "direct" else None,
         scenes=scenes,
@@ -917,6 +934,136 @@ def character_image(pid: str, cid: str):
     return FileResponse(str(path), media_type=media)
 
 
+# ------------------------------------------------- Backgrounds (location references)
+
+MAX_BG_IMAGE_BYTES = 10 * 1024 * 1024
+BG_ALLOWED_EXTS = {".jpg", ".jpeg", ".png", ".webp"}
+
+
+@app.post("/project/{pid}/backgrounds")
+async def background_add(request: Request, pid: str, name: str = Form(...),
+                         image: UploadFile = File(...)):
+    require_user(request)
+    ext = Path(image.filename or "").suffix.lower()
+    if ext not in BG_ALLOWED_EXTS:
+        return RedirectResponse(
+            f"/project/{pid}?stage=direct&err={_q('Reference image must be JPG, PNG or WEBP.')}",
+            status_code=303)
+    data = await image.read()
+    if len(data) > MAX_BG_IMAGE_BYTES:
+        return RedirectResponse(
+            f"/project/{pid}?stage=direct&err={_q('That image is over 10 MB. Shrink it and try again.')}",
+            status_code=303)
+    ok, res = bcall(backend.add_background, pid, name, data,
+                    image.filename or "background.png")
+    if not ok:
+        return RedirectResponse(
+            f"/project/{pid}?stage=direct&err={_q(res)}", status_code=303)
+    return RedirectResponse(
+        f"/project/{pid}?stage=direct&status={_q('Background added.')}",
+        status_code=303)
+
+
+@app.post("/project/{pid}/backgrounds/{bid}/delete")
+def background_delete(request: Request, pid: str, bid: str):
+    require_user(request)
+    ok, res = bcall(backend.remove_background, pid, bid)
+    if not ok:
+        return RedirectResponse(
+            f"/project/{pid}?stage=direct&err={_q(res)}", status_code=303)
+    return RedirectResponse(f"/project/{pid}?stage=direct", status_code=303)
+
+
+@app.get("/project/{pid}/backgrounds/{bid}/image")
+def background_image(request: Request, pid: str, bid: str):
+    require_user(request)
+    ok, res = bcall(backend.background_image_path, pid, bid)
+    if not ok:
+        return RedirectResponse(f"/project/{pid}?stage=direct", status_code=303)
+    path = Path(str(res))
+    try:
+        from wavecinema.workspace import project_dir as _pdir
+        bg_dir = _pdir(pid).resolve() / "backgrounds"
+        if bg_dir not in path.resolve().parents and path.resolve() != bg_dir:
+            raise ValueError("path escapes backgrounds dir")
+    except Exception:
+        return RedirectResponse(f"/project/{pid}?stage=direct", status_code=303)
+    if not path.is_file():
+        return RedirectResponse(f"/project/{pid}?stage=direct", status_code=303)
+    media = {".jpg": "image/jpeg", ".jpeg": "image/jpeg",
+             ".png": "image/png", ".webp": "image/webp"}.get(
+                 path.suffix.lower(), "image/jpeg")
+    return FileResponse(str(path), media_type=media)
+
+
+# ------------------------------------------------- Character sheet + background generator (Nano Banana)
+
+ART_STYLE_PRESETS = ["anime", "photorealistic", "3d", "comic", "pixel"]
+ART_STYLE_LABELS = {
+    "anime": "Anime", "photorealistic": "Photorealistic", "3d": "3D render",
+    "comic": "Comic book", "pixel": "Pixel art",
+}
+
+
+@app.get("/project/{pid}/character-sheet", response_class=HTMLResponse)
+def character_sheet_page(request: Request, pid: str,
+                         err: Optional[str] = Query(None),
+                         status: Optional[str] = Query(None),
+                         tab: str = Query("character")):
+    user = require_user(request)
+    ok, p = project_of(pid)
+    if not ok:
+        return RedirectResponse("/", status_code=303)
+    key_ok, ks = bcall(backend.gemini_status, user["id"])
+    gemini = ks if key_ok and isinstance(ks, dict) else {"set": False}
+    ok2, chars = bcall(backend.list_characters, pid)
+    recent = chars[-4:] if ok2 and isinstance(chars, list) else []
+    return templates.TemplateResponse(request, "character_sheet.html", ctx(request,
+        error=err, notice=status,
+        project={"id": pid, "name": _g(p, "name", default=pid)},
+        gemini=gemini,
+        tab=tab if tab in ("character", "background") else "character",
+        styles=ART_STYLE_LABELS,
+        recent=recent,
+    ))
+
+
+@app.post("/project/{pid}/character-sheet")
+def character_sheet_generate(request: Request, pid: str,
+                             name: str = Form(...),
+                             description: str = Form(...),
+                             style: str = Form("anime")):
+    user = require_user(request)
+    if style not in ART_STYLE_PRESETS:
+        style = "anime"
+    ok, res = bcall(backend.generate_character_sheet, pid,
+                    name, description, style, user["id"])
+    if not ok:
+        return RedirectResponse(
+            f"/project/{pid}/character-sheet?err={_q(res)}", status_code=303)
+    cname = res.get("name", name) if isinstance(res, dict) else name
+    return RedirectResponse(
+        f"/project/{pid}/character-sheet?status={_q(f'Character sheet for {cname} generated and added to the cast.')}&tab=character",
+        status_code=303)
+
+
+@app.post("/project/{pid}/character-sheet/background")
+def background_generate(request: Request, pid: str,
+                        name: str = Form(...),
+                        description: str = Form(...)):
+    user = require_user(request)
+    ok, res = bcall(backend.generate_background_image, pid,
+                    name, description, user["id"])
+    if not ok:
+        return RedirectResponse(
+            f"/project/{pid}/character-sheet?tab=background&err={_q(res)}",
+            status_code=303)
+    bname = res.get("name", name) if isinstance(res, dict) else name
+    return RedirectResponse(
+        f"/project/{pid}/character-sheet?tab=background&status={_q(f'Background {bname} generated and saved.')}",
+        status_code=303)
+
+
 # ------------------------------------------------- Settings (BYOK)
 
 @app.get("/settings", response_class=HTMLResponse)
@@ -926,6 +1073,8 @@ def settings_page(request: Request,
     user = require_user(request)
     ok, st = bcall(backend.byok_status, user["id"])
     byok = st if ok and isinstance(st, dict) else {"set": False, "masked": None}
+    ok_g, gst = bcall(backend.gemini_status, user["id"])
+    gemini = gst if ok_g and isinstance(gst, dict) else {"set": False, "masked": None, "source": None}
     ok_auto, auto_res = bcall(backend.auto_generation_available)
     auto = (auto_res if ok_auto and isinstance(auto_res, dict)
             else {"ok": False, "key_source": "none", "label": ""})
@@ -933,6 +1082,7 @@ def settings_page(request: Request,
         error=err,
         notice=status,
         byok=byok,
+        gemini=gemini,
         auto=auto,
     ))
 
@@ -956,6 +1106,30 @@ def settings_byok_delete(request: Request):
         return RedirectResponse(f"/settings?err={_q(res)}", status_code=303)
     return RedirectResponse(
         f"/settings?status={_q('Your key was removed.')}", status_code=303)
+
+
+# ------------------------------------------------- Settings (Gemini / Nano Banana)
+
+@app.post("/settings/gemini")
+def settings_gemini_set(request: Request, api_key: str = Form(...)):
+    user = require_user(request)
+    ok, res = bcall(backend.gemini_set_key, api_key, user["id"])
+    if not ok:
+        return RedirectResponse(f"/settings?err={_q(res)}", status_code=303)
+    return RedirectResponse(
+        f"/settings?status={_q('Gemini key saved (encrypted). Character sheet and background generation are now enabled.')}",
+        status_code=303)
+
+
+@app.post("/settings/gemini/delete")
+def settings_gemini_delete(request: Request):
+    user = require_user(request)
+    ok, res = bcall(backend.gemini_clear_key, user["id"])
+    if not ok:
+        return RedirectResponse(f"/settings?err={_q(res)}", status_code=303)
+    return RedirectResponse(
+        f"/settings?status={_q('Gemini key removed.')}",
+        status_code=303)
 
 
 # ------------------------------------------------------------------ studio
