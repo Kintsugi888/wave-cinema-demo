@@ -1,4 +1,4 @@
-"""Wave Cinema web UI — FastAPI app (Midnight Chrome v1.0).
+"""Wave Cinema web UI: FastAPI app (Midnight Chrome v1.0).
 
 Serves the AI music-video workstation: dashboard, project pipeline
 (01 Ingest → 02 Direct → 03 Review → 04 Export), paywall hook.
@@ -29,7 +29,7 @@ QUOTES = DATA_DIR / "quotes.json"
 LOGO = (WC_ROOT / "brand" / "logo.jpg").resolve()
 
 RIGHTS_VERSION = "wc-rights-v1.0 (2026-10-14)"
-RIGHTS_TEXT = """WAVE CINEMA — RIGHTS STATEMENT (version wc-rights-v1.0, 2026-10-14)
+RIGHTS_TEXT = """WAVE CINEMA RIGHTS STATEMENT (version wc-rights-v1.0, 2026-10-14)
 
 1. This statement covers exactly the song file(s) you upload in this session.
 2. Purpose: generating an AI music video for that song inside Wave Cinema
@@ -73,7 +73,7 @@ def ms_to_ts(ms: Any) -> str:
     try:
         ms = int(ms)
     except (TypeError, ValueError):
-        return "—"
+        return "-"
     m, rem = divmod(ms, 60000)
     s, mm = divmod(rem, 1000)
     return f"{m:02d}:{s:02d}.{mm:03d}"
@@ -83,7 +83,7 @@ def fmt_duration(sec: Any) -> str:
     try:
         total_ms = int(float(sec) * 1000)
     except (TypeError, ValueError):
-        return "—"
+        return "-"
     return ms_to_ts(total_ms)
 
 
@@ -181,7 +181,7 @@ def song_view(p: dict) -> Optional[dict]:
     return {
         "filename": _g(s, "filename", "name", default="song"),
         "duration": fmt_duration(_g(s, "duration_sec", "duration", "seconds")),
-        "sha256": _g(s, "sha256", "sha", "hash", default="—"),
+        "sha256": _g(s, "sha256", "sha", "hash", default="-"),
         "rights_version": _g(s, "rights_version", "rights_statement_version"),
     }
 
@@ -223,7 +223,7 @@ def scene_views(p: dict) -> list:
     quotes = pending_quotes().get(p.get("id", ""), {})
     for i, s in enumerate(raw):
         sid = str(_g(s, "scene_id", "id", "index", default=i))
-        cast = _g(s, "cast", "characters", default="—")
+        cast = _g(s, "cast", "characters", default="-")
         if isinstance(cast, list):
             cast = ", ".join(str(c) for c in cast)
         prompt = str(_g(s, "prompt", "scene_prompt", default=""))
@@ -243,7 +243,7 @@ def scene_views(p: dict) -> list:
 
 
 def quote_view(q: dict) -> dict:
-    total = _g(q, "total", "credits", "amount", default="—")
+    total = _g(q, "total", "credits", "amount", default="-")
     currency = _g(q, "currency", default="credits")
     detail_bits = []
     for k, label in (("model", None), ("resolution", None),
@@ -276,7 +276,7 @@ def takes_view(pid: str, p: dict) -> list:
             cards.append({
                 "take_id": tid,
                 "video_url": media_url(_g(t, "video_url", "url", "path", "file"), pid),
-                "sha_short": (sha[:12] + "…") if len(sha) > 12 else (sha or "—"),
+                "sha_short": (sha[:12] + "…") if len(sha) > 12 else (sha or "-"),
                 "status": str(_g(t, "status", default="ready")),
                 "selected": bool(sel_id and tid == sel_id) or bool(_g(t, "selected")),
             })
@@ -299,8 +299,8 @@ def master_view(pid: str, p: dict) -> Optional[dict]:
         return None
     return {
         "url": url,
-        "bytes": _g(m, "bytes", "size", default="—"),
-        "sha256": _g(m, "sha256", "sha", "hash", default="—"),
+        "bytes": _g(m, "bytes", "size", default="-"),
+        "sha256": _g(m, "sha256", "sha", "hash", default="-"),
     }
 
 
@@ -312,7 +312,7 @@ def ready_to_assemble(p: dict) -> bool:
         if not _g(s, "selected_take_id", "selected_take"):
             sel = _g(p, "selections", "selected_takes", default={}) or {}
             if isinstance(sel, dict) and sel:
-                return True  # selections map present — trust backend shape
+                return True  # selections map present: trust backend shape
             return False
     return True
 
@@ -427,7 +427,7 @@ def project_page(request: Request,
              else {"ok": False, "reason": "cloud status unavailable"})
     if not cloud.get("ok"):
         # Keep the technical reason out of the UI; users just need the gist.
-        cloud = {"ok": False, "reason": "coming soon — DIY Clips works right now"}
+        cloud = {"ok": False, "reason": "coming soon. DIY Clips works right now"}
     return templates.TemplateResponse(request, "project.html", ctx(
         error=err,
         project={"id": pid, "name": _g(p, "name", default=pid)},
@@ -441,7 +441,8 @@ def project_page(request: Request,
         scenes_with_takes=takes_view(pid, p) if active == "review" else [],
         master=master_view(pid, p) if active == "export" else None,
         ready_to_assemble=ready_to_assemble(p),
-        assemble_status=status,
+        assemble_status=status if active == "export" else None,
+        notice=status if active != "export" else None,
     ))
 
 
@@ -449,7 +450,7 @@ def project_page(request: Request,
 async def ingest(pid: str, song: UploadFile = File(...), assent: Optional[str] = Form(None)):
     if assent != "yes":
         return RedirectResponse(
-            f"/project/{pid}?stage=ingest&err={_q('Tick the rights box first — we can’t touch your song without it.')}",
+            f"/project/{pid}?stage=ingest&err={_q('Tick the rights box first: we can’t touch your song without it.')}",
             status_code=303)
     ext = Path(song.filename or "").suffix.lower()
     if ext not in ALLOWED_EXTS:
@@ -460,7 +461,7 @@ async def ingest(pid: str, song: UploadFile = File(...), assent: Optional[str] =
     data = await song.read()
     if len(data) > MAX_UPLOAD_BYTES:
         return RedirectResponse(
-            f"/project/{pid}?stage=ingest&err={_q('That file’s over 250 MB — shrink it and try again.')}", status_code=303)
+            f"/project/{pid}?stage=ingest&err={_q('That file is over 250 MB. Shrink it and try again.')}", status_code=303)
     ok, res = bcall(backend.ingest_song, pid, data, song.filename or "song",
                     RIGHTS_VERSION, True)
     if not ok:
@@ -480,7 +481,7 @@ def direct(pid: str, treatment: str = Form("")):
         ok, res = bcall(fn)
         if not ok:
             return RedirectResponse(
-                f"/project/{pid}?stage=direct&err={_q(f'{label} failed — {res}')}",
+                f"/project/{pid}?stage=direct&err={_q(f'{label} failed: {res}')}",
                 status_code=303)
     return RedirectResponse(f"/project/{pid}?stage=direct", status_code=303)
 
@@ -503,7 +504,7 @@ def approve(pid: str, quote_id: str = Form(...), scene_id: str = Form(...)):
     q = pending_quotes().get(pid, {}).get(str(scene_id))
     if not q or str(_g(q, "quote_id", "id", default="")) != str(quote_id):
         return RedirectResponse(
-            f"/project/{pid}?stage=direct&err={_q('Quote expired or missing — please re-quote this scene.')}",
+            f"/project/{pid}?stage=direct&err={_q('Quote expired or missing. Please re-quote this scene.')}",
             status_code=303)
     ok, res = bcall(backend.approve_quote, pid, quote_id)
     if not ok:
@@ -512,7 +513,7 @@ def approve(pid: str, quote_id: str = Form(...), scene_id: str = Form(...)):
     ok, res = bcall(backend.generate_scene, pid, scene_id, key)
     if not ok:
         return RedirectResponse(
-            f"/project/{pid}?stage=review&err={_q(f'Quote approved, but generation submit failed — {res}. No take created; you can retry without double-spend (idempotency key {key[:8]}…).')}",
+            f"/project/{pid}?stage=review&err={_q(f'Quote approved, but generation submit failed: {res}. No take created; you can retry without double-spend (idempotency key {key[:8]}…).')}",
             status_code=303)
     qq = pending_quotes()
     qq.get(pid, {}).pop(str(scene_id), None)
@@ -593,7 +594,12 @@ async def jobs_import(pid: str, clips: UploadFile = File(...)):
         return RedirectResponse(f"/project/{pid}?stage=review&err={_q(res)}", status_code=303)
     n_in = len(res.get("imported", [])) if isinstance(res, dict) else 0
     n_skip = len(res.get("skipped", [])) if isinstance(res, dict) else 0
-    msg = f"BYO import: {n_in} takes registered, {n_skip} files skipped."
+    if n_in == 0:
+        msg = ("No clips found in that zip. It needs files named scene_00.mp4, "
+               "scene_01.mp4 and so on. If you uploaded the clip pack, that is the "
+               "wrong file: generate the clips first, then zip those and upload them here.")
+    else:
+        msg = f"{n_in} clip(s) ready to review, {n_skip} file(s) skipped."
     return RedirectResponse(f"/project/{pid}?stage=review&status={_q(msg)}", status_code=303)
 
 

@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>{% block title %}Wave Cinema{% endblock %} — Wave Cinema</title>
+<title>{% block title %}Wave Cinema{% endblock %} | Wave Cinema</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@700&family=Inter:wght@400;600&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
@@ -16,7 +16,7 @@
     <span class="wordmark">WAVE <b>CINEMA</b></span>
   </a>
   <div class="credits-pill" title="Credit balance (owner account)">
-    CREDITS&nbsp;<strong>{{ credits if credits is not none else "—" }}</strong>
+    CREDITS&nbsp;<strong>{{ credits if credits is not none else "-" }}</strong>
   </div>
 </header>
 <div class="wrap">
@@ -32,12 +32,18 @@
     <p style="margin:8px 0 0">{{ error }}</p>
   </div>
   {% endif %}
+  {% if notice %}
+  <div class="banner success" role="status">
+    <div class="tag">Done</div>
+    <p style="margin:8px 0 0">{{ notice }}</p>
+  </div>
+  {% endif %}
   {% block content %}{% endblock %}
 </div>
 
 <footer class="footer">
   <div class="foot-inner">
-    <span class="foot-brand">WAVE CINEMA <span class="subtle">— Wave Pon Waves</span></span>
+    <span class="foot-brand">WAVE CINEMA <span class="subtle">· Wave Pon Waves</span></span>
     <nav class="foot-links">
       <a href="/faq">FAQ</a>
       <a href="/terms">Terms</a>
@@ -45,14 +51,14 @@
       <a href="/refunds">Refunds</a>
     </nav>
   </div>
-  <p class="subtle foot-note">Test mode — no real money moves here. Credits have no cash value and are non-transferable.</p>
+  <p class="subtle foot-note">Test mode: no real money moves here. Credits have no cash value and are non-transferable.</p>
 </footer>
 
 <div id="radio" class="radio-widget" aria-label="Shamz Radio">
   <button id="radio-toggle" class="radio-btn" title="Play Shamz Radio">▶</button>
   <div class="radio-meta">
     <div class="radio-title">SHAMZ RADIO</div>
-    <div id="radio-track" class="radio-track">Tap play — 8 tracks on shuffle</div>
+    <div id="radio-track" class="radio-track">Tap play: 8 tracks on shuffle</div>
   </div>
   <button id="radio-next" class="radio-btn small" title="Next track">⏭</button>
   <audio id="radio-audio" preload="none"></audio>
@@ -81,7 +87,7 @@
   function load(i) {
     idx = (i + tracks.length) % tracks.length;
     audio.src = "/static/audio/" + tracks[idx][0];
-    label.textContent = "♪ " + tracks[idx][1] + " — Shamz";
+    label.textContent = "♪ " + tracks[idx][1] + " · Shamz";
   }
   function play() { load(idx); audio.play(); toggle.textContent = "⏸"; toggle.classList.add("playing"); }
   function pause() { audio.pause(); toggle.textContent = "▶"; toggle.classList.remove("playing"); }

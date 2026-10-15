@@ -35,7 +35,7 @@
 
 {% if active_stage == "ingest" %}
 <div class="panel">
-  <h2>01 — Drop the Track</h2>
+  <h2>01 · Drop the Track</h2>
   {% if song %}
   <dl class="kv">
     <dt>Track</dt><dd>{{ song.filename }}</dd>
@@ -67,7 +67,7 @@
 
 {% if active_stage == "direct" %}
 <div class="panel">
-  <h2>02 — Direct the Film</h2>
+  <h2>02 · Direct the Film</h2>
   {% if not song %}
   <p class="subtle">Drop your track first.</p>
   <p><a class="btn" href="/project/{{ project.id }}?stage=ingest">Go drop it</a></p>
@@ -109,7 +109,7 @@
           </form>
         {% endif %}
         {% else %}
-          <span class="subtle">DIY lane — no prices needed, you're generating</span>
+          <span class="subtle">DIY lane: no prices needed, you're generating</span>
         {% endif %}
       </td>
     </tr>
@@ -133,7 +133,7 @@
   <form method="post" action="/project/{{ project.id }}/direct">
     <label class="field" for="treatment">Tell us the vibe</label>
     <textarea id="treatment" name="treatment" placeholder="What world does this video live in? The look, the story, the arc…" {% if not backend_ok %}disabled{% endif %}></textarea>
-    <p class="hint">We listen to your track, slice it into scenes and plan every shot. Free — no credits spent.</p>
+    <p class="hint">We listen to your track, slice it into scenes and plan every shot. Free. No credits spent.</p>
     <p><input type="submit" class="primary" value="Build my game plan" {% if not backend_ok %}disabled{% endif %}></p>
   </form>
   {% endif %}
@@ -142,19 +142,19 @@
 
 {% if active_stage == "review" %}
 <div class="panel">
-  <h2>03 — Pick Your Shots</h2>
+  <h2>03 · Pick Your Shots</h2>
   {% if lane != "cloud" %}
   <h3>Upload your clips</h3>
   <form method="post" action="/project/{{ project.id }}/jobs/import" enctype="multipart/form-data">
     <label class="field" for="clips">Your clips zip (<span class="mono">scene_00.mp4 … scene_NN.mp4</span>)</label>
     <input type="file" id="clips" name="clips" accept=".zip,application/zip" required {% if not backend_ok %}disabled{% endif %}>
     <p><input type="submit" class="primary" value="Upload my clips" {% if not backend_ok %}disabled{% endif %}></p>
-    <p class="hint">Every good clip becomes a take. Free — you made them on your own account. Watch them all, crown the winners, then ship it.</p>
+    <p class="hint">Every good clip becomes a take. Free. You made them on your own account. Watch them all, crown the winners, then ship it.</p>
   </form>
   <hr class="divider">
   {% endif %}
   {% if not scenes_with_takes %}
-  <p class="subtle">No clips yet. Hit &ldquo;Make this scene&rdquo; in <a href="/project/{{ project.id }}?stage=direct">Direct the Film</a> — or make them on your own account and upload above.</p>
+  <p class="subtle">No clips yet. Hit &ldquo;Make this scene&rdquo; in <a href="/project/{{ project.id }}?stage=direct">Direct the Film</a>, or make them on your own account and upload above.</p>
   {% else %}
   {% for sc in scenes_with_takes %}
   <h3>Scene <span class="mono">{{ sc.n }}</span> <span class="ts subtle">{{ sc.start }} &rarr; {{ sc.end }}</span></h3>
@@ -164,7 +164,7 @@
       {% if t.video_url %}
       <video controls preload="metadata" src="{{ t.video_url }}" playsinline></video>
       {% else %}
-      <div class="subtle" style="aspect-ratio:16/9;display:flex;align-items:center;justify-content:center;background:#000;border-radius:8px">Clip — preview can't load</div>
+      <div class="subtle" style="aspect-ratio:16/9;display:flex;align-items:center;justify-content:center;background:#000;border-radius:8px">Clip (preview unavailable)</div>
       {% endif %}
       <div class="meta mono">{{ t.take_id }}</div>
       <div class="meta mono">{{ t.sha_short }}</div>
@@ -179,7 +179,7 @@
         </form>
         {% endif %}
         <form method="post" action="/project/{{ project.id }}/reroll"
-              onsubmit="return confirm('Reroll starts a NEW PAID generation — fresh price, fresh charge. Continue?');">
+              onsubmit="return confirm('Reroll starts a NEW PAID generation: fresh price, fresh charge. Continue?');">
           <input type="hidden" name="scene_id" value="{{ sc.id }}">
           <button type="submit" class="danger">Reroll</button>
         </form>
@@ -192,10 +192,10 @@
   <h3>Winner's checklist</h3>
   <p class="subtle">Before you crown a take, check it:</p>
   <ul class="checklist">
-    <li><span class="tick">&#10003;</span><span><strong>Same face</strong> — the character looks exactly like the game plan says.</span></li>
-    <li><span class="tick">&#10003;</span><span><strong>Same fit</strong> — clothes, setting and props match the last scene.</span></li>
-    <li><span class="tick">&#10003;</span><span><strong>Clean bodies</strong> — hands, faces, no warping or extra limbs.</span></li>
-    <li><span class="tick">&#10003;</span><span><strong>No junk in frame</strong> — no weird text, watermarks or logos.</span></li>
+    <li><span class="tick">&#10003;</span><span><strong>Same face</strong>: the character looks exactly like the game plan says.</span></li>
+    <li><span class="tick">&#10003;</span><span><strong>Same fit</strong>: clothes, setting and props match the last scene.</span></li>
+    <li><span class="tick">&#10003;</span><span><strong>Clean bodies</strong>: hands, faces, no warping or extra limbs.</span></li>
+    <li><span class="tick">&#10003;</span><span><strong>No junk in frame</strong>: no weird text, watermarks or logos.</span></li>
   </ul>
   {% endif %}
 </div>
@@ -203,7 +203,7 @@
 
 {% if active_stage == "export" %}
 <div class="panel">
-  <h2>04 — Ship It</h2>
+  <h2>04 · Ship It</h2>
   {% if master %}
   <video class="master" controls preload="metadata" src="{{ master.url }}" playsinline></video>
   <dl class="kv" style="margin-top:16px">
@@ -212,7 +212,7 @@
   </dl>
   <p><a class="btn primary" href="{{ master.url }}" download>Download my video</a></p>
   {% else %}
-  <p class="subtle">We stitch your winning takes together — trimmed to the exact scene timings, under your untouched song. Free.</p>
+  <p class="subtle">We stitch your winning takes together, trimmed to the exact scene timings, under your untouched song. Free.</p>
   <form method="post" action="/project/{{ project.id }}/assemble">
     <button type="submit" class="primary" {% if not backend_ok or not ready_to_assemble %}disabled{% endif %}>Stitch my film</button>
   </form>
