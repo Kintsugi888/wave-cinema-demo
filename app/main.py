@@ -640,7 +640,6 @@ def backgrounds_view(pid: str, p: dict) -> list:
     return views
 
 
-@app.get("/project/{pid}", response_class=HTMLResponse)
 def _check_owner(pid: str, p: dict, user: dict) -> Optional[str]:
     """Return an error message if the user may not access this project."""
     owner_id = p.get("owner_id") if isinstance(p, dict) else None
@@ -654,6 +653,7 @@ def _check_owner(pid: str, p: dict, user: dict) -> Optional[str]:
     return None
 
 
+@app.get("/project/{pid}", response_class=HTMLResponse)
 def project_page(request: Request,
                  pid: str,
                  stage: Optional[str] = Query(None),
