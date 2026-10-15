@@ -5,7 +5,7 @@
 <p class="subtle">AI-powered film studio. Song in, finished music video out.</p>
 
 <div class="panel">
-  <h2>Projects</h2>
+  <h2>Your Films</h2>
   {% if projects %}
   <div class="grid cols-3">
     {% for p in projects %}
@@ -22,13 +22,13 @@
 </div>
 
 <div class="panel">
-  <h2>New project</h2>
+  <h2>Start a new film</h2>
   <form method="post" action="/projects">
-    <label class="field" for="name">Project name</label>
+    <label class="field" for="name">Film name</label>
     <input type="text" id="name" name="name" placeholder="e.g. Midnight Drive — official video" required maxlength="120"
       {% if not backend_ok %}disabled{% endif %}>
-    <p class="hint">One project per film. {% if not backend_ok %}Disabled until the backend lands.{% endif %}</p>
-    <p><input type="submit" class="primary" value="Create project" {% if not backend_ok %}disabled{% endif %}></p>
+    <p class="hint">One film, one project. {% if not backend_ok %}Disabled until the backend lands.{% endif %}</p>
+    <p><input type="submit" class="primary" value="Create film" {% if not backend_ok %}disabled{% endif %}></p>
   </form>
 </div>
 {% endblock %}

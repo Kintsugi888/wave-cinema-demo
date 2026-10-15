@@ -51,10 +51,10 @@ templates = Jinja2Templates(directory=str(APP_DIR / "templates"))
 backend = Backend()
 
 STAGES = [
-    {"key": "ingest", "num": "01", "label": "Ingest"},
-    {"key": "direct", "num": "02", "label": "Direct"},
-    {"key": "review", "num": "03", "label": "Review"},
-    {"key": "export", "num": "04", "label": "Export"},
+    {"key": "ingest", "num": "01", "label": "Drop the Track"},
+    {"key": "direct", "num": "02", "label": "Direct the Film"},
+    {"key": "review", "num": "03", "label": "Pick Your Shots"},
+    {"key": "export", "num": "04", "label": "Ship It"},
 ]
 STAGE_KEYS = [s["key"] for s in STAGES]
 
@@ -399,6 +399,9 @@ def project_page(request: Request,
     ok_cloud, cloud_res = bcall(backend.cloud_available)
     cloud = (cloud_res if ok_cloud and isinstance(cloud_res, dict)
              else {"ok": False, "reason": "cloud status unavailable"})
+    if not cloud.get("ok"):
+        # Keep the technical reason out of the UI; users just need the gist.
+        cloud = {"ok": False, "reason": "coming soon — DIY Clips works right now"}
     return templates.TemplateResponse(request, "project.html", ctx(
         error=err,
         project={"id": pid, "name": _g(p, "name", default=pid)},
@@ -420,7 +423,7 @@ def project_page(request: Request,
 async def ingest(pid: str, song: UploadFile = File(...), assent: Optional[str] = Form(None)):
     if assent != "yes":
         return RedirectResponse(
-            f"/project/{pid}?stage=ingest&err={_q('Upload refused: rights assent checkbox is required.')}",
+            f"/project/{pid}?stage=ingest&err={_q('Tick the rights box first — we can’t touch your song without it.')}",
             status_code=303)
     ext = Path(song.filename or "").suffix.lower()
     if ext not in ALLOWED_EXTS:
@@ -431,7 +434,7 @@ async def ingest(pid: str, song: UploadFile = File(...), assent: Optional[str] =
     data = await song.read()
     if len(data) > MAX_UPLOAD_BYTES:
         return RedirectResponse(
-            f"/project/{pid}?stage=ingest&err={_q('File exceeds 250 MB limit.')}", status_code=303)
+            f"/project/{pid}?stage=ingest&err={_q('That file’s over 250 MB — shrink it and try again.')}", status_code=303)
     ok, res = bcall(backend.ingest_song, pid, data, song.filename or "song",
                     RIGHTS_VERSION, True)
     if not ok:
