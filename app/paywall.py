@@ -1,4 +1,4 @@
-"""Wave Cinema paywall — Stripe credit-pack billing.
+"""Wave Cinema paywall: Stripe credit-pack billing.
 
 TEST MODE ONLY. This module refuses to operate with live Stripe keys and never
 creates a real charge. Credit packs are sold via Stripe Checkout (test mode);
@@ -99,11 +99,11 @@ def billing_status() -> Dict[str, Any]:
     if not secret:
         problems.append("STRIPE_SECRET_KEY is not set")
     elif _looks_live(secret):
-        problems.append("STRIPE_SECRET_KEY looks like a LIVE key — test mode only, refusing to run")
+        problems.append("STRIPE_SECRET_KEY looks like a LIVE key: test mode only, refusing to run")
     elif not secret.startswith("sk_test_"):
         problems.append("STRIPE_SECRET_KEY does not look like a Stripe test secret key (expected sk_test_...)")
     if publishable and _looks_live(publishable):
-        problems.append("STRIPE_PUBLISHABLE_KEY looks like a LIVE key — test mode only, refusing to run")
+        problems.append("STRIPE_PUBLISHABLE_KEY looks like a LIVE key: test mode only, refusing to run")
     for pid, price_id in prices.items():
         if not price_id:
             problems.append(f"{PACKS[pid]['env']} is not set (Stripe Price ID for the {pid}-credit pack)")
@@ -274,11 +274,11 @@ def _page(title: str, body: str) -> str:
     return f"""<!doctype html>
 <html lang="en"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>{title} — Wave Cinema</title>{_FONTS}<style>{_CSS}</style></head>
+<title>{title} | Wave Cinema</title>{_FONTS}<style>{_CSS}</style></head>
 <body><div class="wrap">
 <div class="wordmark">WAVE CINEMA</div>
 {body}
-<div class="footer">WAVE CINEMA — AI-Powered Film Studio · Prepaid credits · Test mode · Credits have no cash value and are non-transferable.</div>
+<div class="footer">WAVE CINEMA · AI-Powered Film Studio · Prepaid credits · Test mode · Credits have no cash value and are non-transferable.</div>
 </div></body></html>"""
 
 
@@ -298,17 +298,17 @@ def _billing_page(balance: Optional[int], canceled: bool) -> str:
         </div>""")
     notice = ""
     if canceled:
-        notice = '<div class="notice">Checkout canceled — no charge was made. Your balance is unchanged.</div>'
-    balance_html = f"{balance:,}" if balance is not None else "—"
+        notice = '<div class="notice">Checkout canceled. No charge was made. Your balance is unchanged.</div>'
+    balance_html = f"{balance:,}" if balance is not None else "-"
     balance_note = (
         "Available to spend on generations."
         if balance is not None
-        else "Ledger connecting — balance will appear once the credit ledger is online."
+        else "Ledger connecting. Balance will appear once the credit ledger is online."
     )
     body = f"""
 <h1>Billing</h1>
 <p class="sub">Top up prepaid credits for Wave Cinema. Every generation shows its exact
-credit quote before it runs — you approve the amount, every time.</p>
+credit quote before it runs. You approve the amount, every time.</p>
 {notice}
 <div class="panel">
   <div class="balance-label">CREDIT BALANCE</div>
@@ -345,12 +345,12 @@ def _not_configured_page(problems) -> str:
 <div class="alert">
   <h2>Billing is not configured</h2>
   <p>Credit packs can't be sold until Stripe test-mode credentials are in place.
-  Nothing is broken — the server just needs its environment variables.</p>
+  Nothing is broken. The server just needs its environment variables.</p>
   <ul>{items}</ul>
   <p>See <span class="mono">app/paywall_config.md</span> for setup instructions
-  (test mode only — live keys are refused).</p>
+  (test mode only. Live keys are refused).</p>
 </div>"""
-    return _page("Billing — not configured", body)
+    return _page("Billing: not configured", body)
 
 
 def _success_page() -> str:
@@ -358,10 +358,10 @@ def _success_page() -> str:
 <h1>Payment received</h1>
 <div class="panel center">
   <div class="big">◉</div>
-  <h2 style="font-family:'Space Grotesk',sans-serif">Thank you — your credits are on their way</h2>
+  <h2 style="font-family:'Space Grotesk',sans-serif">Thank you. Your credits are on their way</h2>
   <p class="sub" style="margin:0 auto;max-width:560px">
   Credits are added automatically by our payment webhook, usually within a minute.
-  <strong>This page does not grant credits itself</strong> — there's no need to refresh
+  <strong>This page does not grant credits itself</strong>. There's no need to refresh
   or pay again. Your balance updates on the <a href="/billing">billing page</a> once
   the webhook lands.</p>
 </div>"""
@@ -470,7 +470,7 @@ async def stripe_webhook(request: Request):
         # Money moved but we cannot map it to a pack. Do NOT 500/retry forever:
         # log loudly for manual reconciliation and acknowledge.
         logger.critical(
-            "PAID session %s could not be mapped to a credit pack — manual review required",
+            "PAID session %s could not be mapped to a credit pack. Manual review required",
             session_id,
         )
         _mark_granted(session_id)  # don't retry-grant blindly; a human fixes this
