@@ -713,7 +713,9 @@ def settings_byok_set(api_key: str = Form(...)):
 
 @app.post("/settings/byok/delete")
 def settings_byok_delete():
-    bcall(backend.byok_clear_key)
+    ok, res = bcall(backend.byok_clear_key)
+    if not ok:
+        return RedirectResponse(f"/settings?err={_q(res)}", status_code=303)
     return RedirectResponse(
         f"/settings?status={_q('Your key was removed.')}", status_code=303)
 
