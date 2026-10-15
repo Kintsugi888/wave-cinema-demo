@@ -24,6 +24,7 @@ from . import backgrounds as _backgrounds
 from . import byok as _byok
 from . import captions as _captions
 from . import geminikey as _geminikey
+from . import geminicloud as _geminicloud
 from . import nanobanana as _nanobanana
 from . import characters as _characters
 from . import cuts as _cuts
@@ -532,19 +533,71 @@ def gemini_key_available(user_id: str | None = None) -> bool:
     return _geminikey.get_key(user_id) is not None
 
 
+def gemini_cloud_available() -> bool:
+    """True when the Wave Cinema Cloud image lane is configured."""
+    return _geminicloud.cloud_available()
+
+
+def image_gen_credits() -> int:
+    """Flat credit cost per Cloud Nano Banana image generation."""
+    return _quote.IMAGE_GEN_CREDITS
+
+
+def _resolve_image_key(lane: str, user_id: str | None) -> tuple[str, bool]:
+    """Return (api_key, is_cloud) for an image generation lane.
+
+    lane="cloud" uses the server-side key (credits billed).
+    lane="byok" (default) uses the user's own key (zero credits).
+    """
+    lane = (lane or "byok").strip().lower()
+    if lane == "cloud":
+        key = _geminicloud.get_cloud_key()
+        if not key:
+            raise _geminikey.GeminiKeyError(
+                "Wave Cinema Cloud image generation is not configured yet")
+        return key, True
+    key = _geminikey.get_key(user_id)
+    if not key:
+        raise _geminikey.GeminiKeyError(
+            "no Gemini API key — add one in Settings to enable sheet generation")
+    return key, False
+
+
 # ------------------------------------------------- Nano Banana generation
 
 def generate_character_sheet(project_id: str, name: str, description: str,
                              style: str = "anime",
-                             user_id: str | None = None) -> dict:
+                             user_id: str | None = None,
+                             lane: str = "byok",
+                             account_id: str | None = None) -> dict:
     """Generate a character reference sheet with Nano Banana and save it
-    as a character reference on the project. Returns the character record."""
-    api_key = _geminikey.get_key(user_id)
-    if not api_key:
-        raise _geminikey.GeminiKeyError(
-            "no Gemini API key — add one in Settings to enable sheet generation")
-    prompt = _nanobanana.character_sheet_prompt(name, description, style)
-    result = _nanobanana.generate_image(prompt, api_key)
+    as a character reference on the project. Returns the character record.
+
+    lane="byok": user's own key, zero credits.
+    lane="cloud": server key, IMAGE_GEN_CREDITS held + captured from
+    account_id's ledger (released if generation fails).
+    """
+    api_key, is_cloud = _resolve_image_key(lane, user_id)
+    hold_id = None
+    if is_cloud:
+        if not account_id:
+            raise ValueError("cloud image generation needs an account_id")
+        hold = _ledger.Ledger().hold(
+            account_id,
+            _quote.IMAGE_GEN_CREDITS,
+            idempotency_key=f"imggen:{project_id}:{name.strip().lower()}:{style}",
+            memo=f"Nano Banana character sheet '{name}' project {project_id}",
+        )
+        hold_id = hold["id"]
+    try:
+        prompt = _nanobanana.character_sheet_prompt(name, description, style)
+        result = _nanobanana.generate_image(prompt, api_key)
+    except Exception:
+        if hold_id is not None:
+            _ledger.Ledger().release(hold_id)
+        raise
+    if hold_id is not None:
+        _ledger.Ledger().capture(hold_id)
     ext = ".png" if result["image_bytes"][:8] == b"\x89PNG\r\n\x1a\n" else ".jpg"
     # add_character validates magic bytes itself
     filename = f"{name.strip().lower().replace(' ', '_')}_sheet{ext}"
@@ -553,15 +606,37 @@ def generate_character_sheet(project_id: str, name: str, description: str,
 
 
 def generate_background_image(project_id: str, name: str, description: str,
-                              user_id: str | None = None) -> dict:
+                              user_id: str | None = None,
+                              lane: str = "byok",
+                              account_id: str | None = None) -> dict:
     """Generate an environment backplate with Nano Banana and save it as a
-    background reference on the project. Returns the background record."""
-    api_key = _geminikey.get_key(user_id)
-    if not api_key:
-        raise _geminikey.GeminiKeyError(
-            "no Gemini API key — add one in Settings to enable generation")
-    prompt = _nanobanana.background_prompt(description)
-    result = _nanobanana.generate_image(prompt, api_key)
+    background reference on the project. Returns the background record.
+
+    lane="byok": user's own key, zero credits.
+    lane="cloud": server key, IMAGE_GEN_CREDITS held + captured from
+    account_id's ledger (released if generation fails).
+    """
+    api_key, is_cloud = _resolve_image_key(lane, user_id)
+    hold_id = None
+    if is_cloud:
+        if not account_id:
+            raise ValueError("cloud image generation needs an account_id")
+        hold = _ledger.Ledger().hold(
+            account_id,
+            _quote.IMAGE_GEN_CREDITS,
+            idempotency_key=f"imggen:bg:{project_id}:{name.strip().lower()}",
+            memo=f"Nano Banana background '{name}' project {project_id}",
+        )
+        hold_id = hold["id"]
+    try:
+        prompt = _nanobanana.background_prompt(description)
+        result = _nanobanana.generate_image(prompt, api_key)
+    except Exception:
+        if hold_id is not None:
+            _ledger.Ledger().release(hold_id)
+        raise
+    if hold_id is not None:
+        _ledger.Ledger().capture(hold_id)
     ext = ".png" if result["image_bytes"][:8] == b"\x89PNG\r\n\x1a\n" else ".jpg"
     filename = f"{name.strip().lower().replace(' ', '_')}_bg{ext}"
     return _backgrounds.add_background(project_id, name, result["image_bytes"],

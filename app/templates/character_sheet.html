@@ -38,6 +38,17 @@
       <option value="{{ key }}">{{ label }}</option>
       {% endfor %}
     </select>
+    <label class="field">Generation lane</label>
+    <div class="lane-pick">
+      <label class="lane{% if not gemini.set %} off{% endif %}">
+        <input type="radio" name="lane" value="byok" checked{% if not gemini.set %} disabled{% endif %}>
+        <span><strong>Use my key</strong> — free, your Gemini key{% if not gemini.set %} (no key saved){% endif %}</span>
+      </label>
+      <label class="lane{% if not cloud.available %} off{% endif %}">
+        <input type="radio" name="lane" value="cloud"{% if not cloud.available %} disabled{% endif %}{% if not gemini.set and cloud.available %} checked{% endif %}>
+        <span><strong>Wave Cinema Cloud</strong> — {{ img_credits }} credits{% if not cloud.available %} (not configured yet){% else %} · balance {{ balance }}{% endif %}</span>
+      </label>
+    </div>
     <p><input type="submit" class="primary" value="Generate sheet (~30–60s)"></p>
   </form>
   {% if recent %}
@@ -61,6 +72,17 @@
     <input type="text" id="bggen-name" name="name" required maxlength="80" placeholder="e.g. Neon Rooftop" class="auth-input">
     <label class="field" for="bggen-desc">Describe the environment</label>
     <textarea id="bggen-desc" name="description" required rows="4" class="auth-input" placeholder="Setting, time of day, architecture, lighting mood, palette, key details…"></textarea>
+    <label class="field">Generation lane</label>
+    <div class="lane-pick">
+      <label class="lane{% if not gemini.set %} off{% endif %}">
+        <input type="radio" name="lane" value="byok" checked{% if not gemini.set %} disabled{% endif %}>
+        <span><strong>Use my key</strong> — free, your Gemini key{% if not gemini.set %} (no key saved){% endif %}</span>
+      </label>
+      <label class="lane{% if not cloud.available %} off{% endif %}">
+        <input type="radio" name="lane" value="cloud"{% if not cloud.available %} disabled{% endif %}{% if not gemini.set and cloud.available %} checked{% endif %}>
+        <span><strong>Wave Cinema Cloud</strong> — {{ img_credits }} credits{% if not cloud.available %} (not configured yet){% else %} · balance {{ balance }}{% endif %}</span>
+      </label>
+    </div>
     <p><input type="submit" class="primary" value="Generate background (~30–60s)"></p>
   </form>
 </div>
@@ -78,5 +100,12 @@ select.auth-input{appearance:auto}
 .alert{padding:12px 16px;border-radius:10px;margin:12px 0}
 .alert.error{background:#3a1420;border:1px solid #E63946;color:#ffb3ba}
 .alert.ok{background:#0f2f1d;border:1px solid #2ea043;color:#a9e5c0}
+.lane-pick{display:flex;flex-direction:column;gap:8px;margin-bottom:16px}
+.lane{display:flex;align-items:center;gap:10px;padding:12px 14px;border-radius:10px;
+  background:#080D18;border:1px solid #24406e;cursor:pointer;font-size:14px;color:#C5D0E0}
+.lane:hover{border-color:#1677FF}
+.lane.off{opacity:.55;cursor:not-allowed}
+.lane input{accent-color:#1677FF}
+.lane strong{color:#F4F8FF}
 </style>
 {% endblock %}

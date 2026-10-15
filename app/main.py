@@ -1016,12 +1016,22 @@ def character_sheet_page(request: Request, pid: str,
         return RedirectResponse("/", status_code=303)
     key_ok, ks = bcall(backend.gemini_status, user["id"])
     gemini = ks if key_ok and isinstance(ks, dict) else {"set": False}
+    cloud_ok, cs = bcall(backend.gemini_cloud_available)
+    cloud = {"available": bool(cloud_ok and cs)}
+    account_id = authmod.ledger_account_id(user)
+    bal_ok, bal = bcall(backend.credit_balance, account_id=account_id)
+    balance = bal if bal_ok and isinstance(bal, int) else 0
     ok2, chars = bcall(backend.list_characters, pid)
     recent = chars[-4:] if ok2 and isinstance(chars, list) else []
+    img_ok, img_credits = bcall(backend.image_gen_credits)
+    img_credits = img_credits if img_ok and isinstance(img_credits, int) else 10
     return templates.TemplateResponse(request, "character_sheet.html", ctx(request,
         error=err, notice=status,
         project={"id": pid, "name": _g(p, "name", default=pid)},
         gemini=gemini,
+        cloud=cloud,
+        balance=balance,
+        img_credits=img_credits,
         tab=tab if tab in ("character", "background") else "character",
         styles=ART_STYLE_LABELS,
         recent=recent,
@@ -1032,12 +1042,16 @@ def character_sheet_page(request: Request, pid: str,
 def character_sheet_generate(request: Request, pid: str,
                              name: str = Form(...),
                              description: str = Form(...),
-                             style: str = Form("anime")):
+                             style: str = Form("anime"),
+                             lane: str = Form("byok")):
     user = require_user(request)
     if style not in ART_STYLE_PRESETS:
         style = "anime"
+    if lane not in ("byok", "cloud"):
+        lane = "byok"
     ok, res = bcall(backend.generate_character_sheet, pid,
-                    name, description, style, user["id"])
+                    name, description, style, user["id"],
+                    lane, authmod.ledger_account_id(user))
     if not ok:
         return RedirectResponse(
             f"/project/{pid}/character-sheet?err={_q(res)}", status_code=303)
@@ -1050,10 +1064,14 @@ def character_sheet_generate(request: Request, pid: str,
 @app.post("/project/{pid}/character-sheet/background")
 def background_generate(request: Request, pid: str,
                         name: str = Form(...),
-                        description: str = Form(...)):
+                        description: str = Form(...),
+                        lane: str = Form("byok")):
     user = require_user(request)
+    if lane not in ("byok", "cloud"):
+        lane = "byok"
     ok, res = bcall(backend.generate_background_image, pid,
-                    name, description, user["id"])
+                    name, description, user["id"],
+                    lane, authmod.ledger_account_id(user))
     if not ok:
         return RedirectResponse(
             f"/project/{pid}/character-sheet?tab=background&err={_q(res)}",

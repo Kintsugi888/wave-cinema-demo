@@ -36,6 +36,9 @@ CLOUD_MODEL = "higgsfield/seedance-2.5"  # Wave Cinema Cloud model label
 CLOUD_MARGIN = 1.5  # pricing lever: cloud quotes are base x margin
 # Resolution multipliers (2K costs 1.5x the 1080p rate).
 RESOLUTION_MULTIPLIERS = {"1080p": 1.0, "2K": 1.5}
+# Flat credit cost per Nano Banana image generation (character sheets,
+# backgrounds). Service cost is ~$0.034/image; the spread is the margin.
+IMAGE_GEN_CREDITS = 10
 
 
 def _utcnow() -> datetime:
