@@ -20,8 +20,11 @@ from __future__ import annotations
 from datetime import datetime, timezone
 
 from . import assemble as _assemble
+from . import backgrounds as _backgrounds
 from . import byok as _byok
 from . import captions as _captions
+from . import geminikey as _geminikey
+from . import nanobanana as _nanobanana
 from . import characters as _characters
 from . import cuts as _cuts
 from . import direct as _direct
@@ -219,12 +222,16 @@ def quote_scene(project_id: str, scene_id: str) -> dict:
     return _quote.quote_scene(project_id, scene_id)
 
 
-def approve_quote(project_id: str, quote_id: str) -> dict:
+def approve_quote(project_id: str, quote_id: str,
+                  account_id: str = DEFAULT_ACCOUNT) -> dict:
     """Approve a quote: creates a ledger hold for the exact quoted amount.
 
     BYOK quotes (user's own key) move no credits: no hold is created and
     hold_id stays None. If the key source changed since quoting, the caller
     must re-quote — silently switching billing would be a nasty surprise.
+
+    `account_id` selects whose ledger the hold is booked against; it
+    defaults to the legacy shared account for backwards compatibility.
     """
     ws = _workspace.ProjectWorkspace.load(project_id)
     quote = ws.state["quotes"].get(quote_id)
@@ -250,7 +257,7 @@ def approve_quote(project_id: str, quote_id: str) -> dict:
         ws.log_event(f"approved BYOK quote {quote_id}: no hold, no credits")
     else:
         hold = _ledger.Ledger().hold(
-            DEFAULT_ACCOUNT,
+            account_id,
             quote["credits_total"],
             idempotency_key=f"quote:{quote_id}",
             memo=f"quote {quote_id} scene {quote['scene_id']} project {project_id}",
@@ -355,7 +362,10 @@ def generate_scene(project_id: str, scene_id: str,
             scene, scene["prompt"],
             duration_s=(scene["end_ms"] - scene["start_ms"]) / 1000.0,
             aspect=_render_opts.get_aspect_ratio(project_id),
-            reference_images=_characters.character_reference_paths(project_id),
+            reference_images=(
+                _characters.character_reference_paths(project_id)
+                + _backgrounds.background_reference_paths(project_id)
+            )[:9],
         )
         take = _takes.register_take(
             project_id, scene_id, clip_path,
@@ -475,6 +485,87 @@ def remove_character(project_id: str, character_id: str) -> dict:
 def character_image_path(project_id: str, character_id: str) -> str:
     """Absolute path of a character's reference image (validated)."""
     return str(_characters.character_image_path(project_id, character_id))
+
+
+# ------------------------------------------------- backgrounds
+
+def add_background(project_id: str, name: str, image_bytes: bytes,
+                   filename: str) -> dict:
+    """Add a named background with a reference image to the project."""
+    return _backgrounds.add_background(project_id, name, image_bytes, filename)
+
+
+def list_backgrounds(project_id: str) -> list:
+    """All backgrounds in the project, oldest first."""
+    return _backgrounds.list_backgrounds(project_id)
+
+
+def remove_background(project_id: str, background_id: str) -> dict:
+    """Delete a background and its reference image."""
+    return _backgrounds.remove_background(project_id, background_id)
+
+
+def background_image_path(project_id: str, background_id: str) -> str:
+    """Absolute path of a background's reference image (validated)."""
+    return str(_backgrounds.background_image_path(project_id, background_id))
+
+
+# ------------------------------------------------- gemini key (Nano Banana)
+
+def gemini_status(user_id: str | None = None) -> dict:
+    """{"set": bool, "masked": str|None, "source": ...} — never exposes the key."""
+    return _geminikey.status(user_id)
+
+
+def gemini_set_key(api_key: str, user_id: str | None = None) -> dict:
+    """Encrypt and store the user's Gemini API key."""
+    return _geminikey.set_key(api_key, user_id)
+
+
+def gemini_clear_key(user_id: str | None = None) -> dict:
+    """Remove the stored Gemini API key."""
+    return _geminikey.clear_key(user_id)
+
+
+def gemini_key_available(user_id: str | None = None) -> bool:
+    """True when a Gemini key is configured (stored or env)."""
+    return _geminikey.get_key(user_id) is not None
+
+
+# ------------------------------------------------- Nano Banana generation
+
+def generate_character_sheet(project_id: str, name: str, description: str,
+                             style: str = "anime",
+                             user_id: str | None = None) -> dict:
+    """Generate a character reference sheet with Nano Banana and save it
+    as a character reference on the project. Returns the character record."""
+    api_key = _geminikey.get_key(user_id)
+    if not api_key:
+        raise _geminikey.GeminiKeyError(
+            "no Gemini API key — add one in Settings to enable sheet generation")
+    prompt = _nanobanana.character_sheet_prompt(name, description, style)
+    result = _nanobanana.generate_image(prompt, api_key)
+    ext = ".png" if result["image_bytes"][:8] == b"\x89PNG\r\n\x1a\n" else ".jpg"
+    # add_character validates magic bytes itself
+    filename = f"{name.strip().lower().replace(' ', '_')}_sheet{ext}"
+    return _characters.add_character(project_id, name, result["image_bytes"],
+                                     filename)
+
+
+def generate_background_image(project_id: str, name: str, description: str,
+                              user_id: str | None = None) -> dict:
+    """Generate an environment backplate with Nano Banana and save it as a
+    background reference on the project. Returns the background record."""
+    api_key = _geminikey.get_key(user_id)
+    if not api_key:
+        raise _geminikey.GeminiKeyError(
+            "no Gemini API key — add one in Settings to enable generation")
+    prompt = _nanobanana.background_prompt(description)
+    result = _nanobanana.generate_image(prompt, api_key)
+    ext = ".png" if result["image_bytes"][:8] == b"\x89PNG\r\n\x1a\n" else ".jpg"
+    filename = f"{name.strip().lower().replace(' ', '_')}_bg{ext}"
+    return _backgrounds.add_background(project_id, name, result["image_bytes"],
+                                       filename)
 
 
 def update_scene_prompt(project_id: str, scene_id: str, prompt: str) -> dict:
@@ -646,6 +737,11 @@ __all__ = [
     "key_source", "auto_generation_available",
     "add_character", "list_characters", "remove_character",
     "character_image_path", "update_scene_prompt",
+    "add_background", "list_backgrounds", "remove_background",
+    "background_image_path",
+    "gemini_status", "gemini_set_key", "gemini_clear_key",
+    "gemini_key_available",
+    "generate_character_sheet", "generate_background_image",
     "byok_status", "byok_set_key", "byok_clear_key",
     "producer_chat", "producer_history",
     "captions", "captions_srt",

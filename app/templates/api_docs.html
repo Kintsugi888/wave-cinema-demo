@@ -1,0 +1,80 @@
+{% extends "base.html" %}
+{% block title %}API docs{% endblock %}
+{% block content %}
+<h1 class="hero-title">DEVELOPER API</h1>
+<p class="subtle">Drive Wave Cinema programmatically — projects, plans, generation, billing. Same engine as the web UI.</p>
+
+<div class="panel">
+  <h2>Authentication</h2>
+  <p>Create a token on your <a href="/account">Account page</a>. Tokens look like <span class="mono">wc_&lt;32 hex chars&gt;</span> and are shown once. Send it as a header on every request:</p>
+  <pre class="code">Authorization: Bearer wc_9f2c…</pre>
+  <p class="subtle">Rate limit: 60 requests/minute per token. Tokens are scoped to your account — you can only see your own projects and billing.</p>
+</div>
+
+<div class="panel">
+  <h2>REST endpoints</h2>
+  <p class="subtle">Base URL: <span class="mono">https://wave-cinema.onrender.com</span></p>
+  <table class="usage-table">
+    <thead><tr><th>Method</th><th>Path</th><th>What it does</th></tr></thead>
+    <tbody>
+      <tr><td class="mono">GET</td><td class="mono">/api/v1/capabilities</td><td>Endpoints, aspects, resolutions, lanes</td></tr>
+      <tr><td class="mono">GET</td><td class="mono">/api/v1/projects</td><td>List your projects</td></tr>
+      <tr><td class="mono">POST</td><td class="mono">/api/v1/projects</td><td>Create a project — body: <span class="mono">{"name": "My film"}</span></td></tr>
+      <tr><td class="mono">GET</td><td class="mono">/api/v1/projects/{pid}</td><td>Project snapshot (cast, stage, plan status)</td></tr>
+      <tr><td class="mono">POST</td><td class="mono">/api/v1/projects/{pid}/direct</td><td>Run the director — body: <span class="mono">{"treatment": "…"}</span></td></tr>
+      <tr><td class="mono">GET</td><td class="mono">/api/v1/projects/{pid}/plan</td><td>Shot plan with per-scene prompts</td></tr>
+      <tr><td class="mono">POST</td><td class="mono">/api/v1/projects/{pid}/generate</td><td>Quote + approve + generate one scene — body: <span class="mono">{"scene_id": "s0"}</span></td></tr>
+      <tr><td class="mono">GET</td><td class="mono">/api/v1/projects/{pid}/takes</td><td>Take history (optional <span class="mono">?scene_id=</span>)</td></tr>
+      <tr><td class="mono">GET</td><td class="mono">/api/v1/billing/balance</td><td>Your credit balance</td></tr>
+      <tr><td class="mono">GET</td><td class="mono">/api/v1/billing/ledger</td><td>Usage history (optional <span class="mono">?limit=</span>)</td></tr>
+    </tbody>
+  </table>
+  <p class="subtle">Errors are JSON <span class="mono">{"error": "…"}</span> with proper status codes: 401 bad token, 402 payment needed, 403 wrong owner, 404 missing, 429 rate-limited.</p>
+</div>
+
+<div class="panel">
+  <h2>Example</h2>
+  <pre class="code">TOKEN=wc_your_token_here
+BASE=https://wave-cinema.onrender.com
+
+# list projects
+curl -s -H "Authorization: Bearer $TOKEN" $BASE/api/v1/projects
+
+# create one
+curl -s -X POST -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"name":"Midnight Drive"}' $BASE/api/v1/projects
+
+# check balance
+curl -s -H "Authorization: Bearer $TOKEN" $BASE/api/v1/billing/balance</pre>
+</div>
+
+<div class="panel">
+  <h2>MCP server (for AI agents)</h2>
+  <p>An MCP server lives at <span class="mono">/mcp</span> (streamable HTTP, JSON-RPC 2.0). Same bearer auth. Tools:</p>
+  <p class="mono">list_projects · create_project · get_plan · generate_scene · get_balance · get_ledger</p>
+  <pre class="code"># initialize
+curl -s -X POST $BASE/mcp \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer $TOKEN" \
+  -d '{"jsonrpc":"2.0","id":1,"method":"initialize",
+       "params":{"protocolVersion":"2024-11-05",
+                 "capabilities":{},"clientInfo":{"name":"cli","version":"1"}}}'
+
+# list tools
+curl -s -X POST $BASE/mcp \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer $TOKEN" \
+  -d '{"jsonrpc":"2.0","id":2,"method":"tools/list","params":{}}'</pre>
+  <p class="subtle">Point any MCP-compatible agent (Claude Code, Codex, OpenClaw, …) at <span class="mono">$BASE/mcp</span> with your token.</p>
+</div>
+
+<style>
+.code{background:#080D18;border:1px solid #1c2942;border-radius:10px;
+  padding:14px 16px;overflow-x:auto;font-family:'JetBrains Mono',monospace;
+  font-size:13px;color:#C5D0E0;white-space:pre}
+.mono{font-family:'JetBrains Mono',monospace;font-size:13px}
+.panel h2{margin-top:0}
+.panel{margin-bottom:20px}
+</style>
+{% endblock %}

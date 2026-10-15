@@ -88,6 +88,7 @@ class _LoginRequired(Exception):
 @app.middleware("http")
 async def auth_middleware(request: Request, call_next):
     path = request.url.path
+    is_api = path.startswith("/api/v1/") or path == "/mcp" or path.startswith("/mcp")
     is_public = path in PUBLIC_PATHS or any(
         path.startswith(p) for p in PUBLIC_PATHS if p.endswith("/"))
     # /billing page itself is public (shows packs); checkout requires login.
@@ -95,7 +96,14 @@ async def auth_middleware(request: Request, call_next):
         is_public = path in ("/billing", "/billing/success")
     if path.startswith("/webhooks/"):
         is_public = True
+    if path == "/api/docs":
+        is_public = True
     if not is_public and not get_current_user(request):
+        if is_api:
+            # API clients get JSON 401s, never a login redirect.
+            # (Bearer-token auth happens per-route; this is the no-session case.)
+            return JSONResponse(status_code=401,
+                                content={"error": "Authentication required: send Authorization: Bearer <api-token>"})
         return RedirectResponse("/login", status_code=303)
     request.state.user = get_current_user(request)
     try:
@@ -1286,6 +1294,8 @@ def account_page(request: Request):
     ok, hist = bcall(backend.ledger_history,
                      authmod.ledger_account_id(user), 50)
     history = _fmt_ledger_history(hist) if ok and isinstance(hist, list) else []
+    import tokens as tokensmod
+    token_list = tokensmod.list_tokens(user["id"])
     # Format the member-since timestamp.
     if user.get("created_at"):
         try:
@@ -1295,7 +1305,30 @@ def account_page(request: Request):
         except Exception:
             user = {**user, "created_at": ""}
     return templates.TemplateResponse(request, "account.html",
-        ctx(request, nav_active="account", history=history))
+        ctx(request, nav_active="account", history=history, tokens=token_list))
+
+
+@app.post("/account/tokens")
+def account_token_create(request: Request, name: str = Form("")):
+    user = require_user(request)
+    import tokens as tokensmod
+    public, raw = tokensmod.create_token(user["id"], name)
+    # Re-render the account page with the raw token shown once.
+    ok, hist = bcall(backend.ledger_history,
+                     authmod.ledger_account_id(user), 50)
+    history = _fmt_ledger_history(hist) if ok and isinstance(hist, list) else []
+    return templates.TemplateResponse(request, "account.html",
+        ctx(request, nav_active="account", history=history,
+            tokens=tokensmod.list_tokens(user["id"]),
+            new_token=raw, new_token_name=public["name"]))
+
+
+@app.post("/account/tokens/{tid}/revoke")
+def account_token_revoke(request: Request, tid: str):
+    user = require_user(request)
+    import tokens as tokensmod
+    tokensmod.revoke_token(user["id"], tid)
+    return RedirectResponse("/account", status_code=303)
 
 
 # ------------------------------------------------------------------ paywall
@@ -1307,3 +1340,24 @@ try:
     app.include_router(paywall_router)
 except Exception as _paywall_err:  # noqa: BLE001
     app.state.paywall_error = str(_paywall_err)
+
+
+# ------------------------------------------------------------------ API v1 + MCP (Phase 4)
+# Same defensive pattern: a broken API module must never take down the UI.
+try:
+    from api_v1 import router as api_v1_router  # type: ignore
+    app.include_router(api_v1_router)
+except Exception as _api_err:  # noqa: BLE001
+    app.state.api_error = str(_api_err)
+
+try:
+    from mcp_server import router as mcp_router  # type: ignore
+    app.include_router(mcp_router)
+except Exception as _mcp_err:  # noqa: BLE001
+    app.state.mcp_error = str(_mcp_err)
+
+
+@app.get("/api/docs", response_class=HTMLResponse)
+def api_docs_page(request: Request):
+    return templates.TemplateResponse(request, "api_docs.html",
+        ctx(request, nav_active="account"))
