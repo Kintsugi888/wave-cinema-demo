@@ -1,0 +1,76 @@
+{% extends "base.html" %}
+{% block title %}Account{% endblock %}
+{% block content %}
+<h1 class="hero-title">ACCOUNT</h1>
+<p class="subtle">Your profile, credits, and usage — all in one place.</p>
+
+<div class="grid cols-2">
+  <div class="panel">
+    <h2>Profile</h2>
+    <div class="profile-row">
+      {% if user.avatar_url %}
+      <img class="profile-avatar" src="{{ user.avatar_url }}" alt="" onerror="this.style.display='none'">
+      {% else %}
+      <div class="profile-avatar placeholder">{{ user.name[:1]|upper }}</div>
+      {% endif %}
+      <div>
+        <div class="profile-name">{{ user.name }}</div>
+        <div class="meta">{{ user.email }}</div>
+        <div class="meta subtle">Signed in with {{ user.provider|title }}{% if user.created_at %} · Member since {{ user.created_at }}{% endif %}</div>
+      </div>
+    </div>
+    <p style="margin-top:16px">
+      <a class="btn" href="/settings">Generation settings</a>
+      <a class="btn" href="/logout">Sign out</a>
+    </p>
+  </div>
+
+  <div class="panel">
+    <h2>Credits</h2>
+    <div class="balance-big">{{ credits if credits is not none else "—" }}</div>
+    <p class="subtle">Available credits. They never expire.</p>
+    <p><a class="btn primary" href="/billing" style="display:inline-block;text-decoration:none">Buy credits</a></p>
+  </div>
+</div>
+
+<div class="panel">
+  <h2>Recent usage</h2>
+  {% if history %}
+  <table class="usage-table">
+    <thead><tr><th>When</th><th>What</th><th>Type</th><th>Credits</th></tr></thead>
+    <tbody>
+      {% for h in history %}
+      <tr>
+        <td class="mono">{{ h.when }}</td>
+        <td>{{ h.memo or "—" }}</td>
+        <td><span class="kind-tag">{{ h.kind }}</span></td>
+        <td class="mono {% if h.kind in ('grant','refund','purchase') %}credit-pos{% else %}credit-neg{% endif %}">
+          {{ "+" if h.kind in ('grant','refund','purchase') else "−" }}{{ h.credits }}
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <p class="subtle">No credit activity yet. Buy a pack or generate your first scene and it'll show up here.</p>
+  {% endif %}
+</div>
+
+<style>
+.profile-row{display:flex;gap:16px;align-items:center}
+.profile-avatar{width:64px;height:64px;border-radius:50%;object-fit:cover}
+.profile-avatar.placeholder{background:#142B52;color:#1677FF;display:flex;
+  align-items:center;justify-content:center;font-size:28px;font-weight:700;
+  font-family:'Space Grotesk',sans-serif}
+.profile-name{font-size:20px;font-weight:700;color:#F4F8FF;font-family:'Space Grotesk',sans-serif}
+.balance-big{font-family:'Space Grotesk',sans-serif;font-size:48px;font-weight:700;color:#1677FF}
+.usage-table{width:100%;border-collapse:collapse;font-size:14px}
+.usage-table th{text-align:left;color:#5b6b87;font-weight:600;padding:10px 8px;
+  border-bottom:1px solid #1c2942;font-size:12px;text-transform:uppercase;letter-spacing:.06em}
+.usage-table td{padding:10px 8px;border-bottom:1px solid #101a2e;color:#C5D0E0}
+.credit-pos{color:#2ecc71}.credit-neg{color:#E63946}
+.kind-tag{background:#142B52;color:#8fa1bd;padding:3px 10px;border-radius:12px;
+  font-size:12px;text-transform:uppercase;letter-spacing:.04em}
+@media (max-width:760px){.grid.cols-2{grid-template-columns:1fr}}
+</style>
+{% endblock %}

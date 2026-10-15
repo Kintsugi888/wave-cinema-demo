@@ -15,6 +15,15 @@
     <img class="logo" src="/brand/logo.jpg" alt="Wave Cinema logo" onerror="this.style.display='none'">
     <span class="wordmark">WAVE <b>CINEMA</b></span>
   </a>
+  <nav class="mainnav">
+    <a href="/" class="{% if nav_active == 'create' %}active{% endif %}">Create</a>
+    <a href="/studio" class="{% if nav_active == 'studio' %}active{% endif %}">Studio</a>
+    <a href="/tools" class="{% if nav_active == 'tools' %}active{% endif %}">Tools</a>
+    <a href="/wiki" class="{% if nav_active == 'wiki' %}active{% endif %}">Wiki</a>
+    {% if user %}
+    <a href="/account" class="{% if nav_active == 'account' %}active{% endif %}">Account</a>
+    {% endif %}
+  </nav>
   <div class="topbar-right">
     {% if user %}
     <div class="credits-pill" title="Credit balance">
@@ -26,6 +35,7 @@
       {% endif %}
       <span class="account-name">{{ user.name }}</span>
       <div class="account-dropdown">
+        <a href="/account">Account</a>
         <a href="/settings">Settings</a>
         <a href="/billing">Billing</a>
         <a href="/logout">Sign out</a>
@@ -38,6 +48,12 @@
 </header>
 <style>
 .topbar-right{display:flex;align-items:center;gap:12px;margin-left:auto}
+.mainnav{display:flex;align-items:center;gap:4px;margin-left:28px}
+.mainnav a{color:#8fa1bd;text-decoration:none;font-size:14px;font-weight:600;
+  padding:8px 14px;border-radius:8px;transition:all .15s}
+.mainnav a:hover{color:#F4F8FF;background:#142B52}
+.mainnav a.active{color:#F4F8FF;background:#142B52;box-shadow:inset 0 -2px 0 #1677FF}
+@media (max-width:760px){.mainnav{margin-left:12px}.mainnav a{padding:8px 8px;font-size:13px}}
 .signin-btn{background:#1677FF;color:#fff;padding:9px 18px;border-radius:8px;
   text-decoration:none;font-weight:600;font-size:14px}
 .signin-btn:hover{background:#0f66e0}
@@ -80,6 +96,8 @@
   <div class="foot-inner">
     <span class="foot-brand">WAVE CINEMA <span class="subtle">· Wave Pon Waves</span></span>
     <nav class="foot-links">
+      <a href="/tools">Tools</a>
+      <a href="/wiki">Wiki</a>
       <a href="/faq">FAQ</a>
       <a href="/terms">Terms</a>
       <a href="/privacy">Privacy</a>

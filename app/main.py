@@ -63,7 +63,8 @@ STAGE_KEYS = [s["key"] for s in STAGES]
 # ------------------------------------------------------------------ auth
 
 PUBLIC_PATHS = ("/", "/faq", "/terms", "/privacy", "/refunds",
-                "/login", "/auth/", "/brand/", "/static/")
+                "/login", "/auth/", "/brand/", "/static/",
+                "/tools", "/wiki")
 
 
 def get_current_user(request: Request) -> Optional[dict]:
@@ -195,13 +196,15 @@ def get_credits(user: Optional[dict] = None) -> Optional[int]:
 
 
 def ctx(request: Optional[Request] = None,
-        error: Optional[str] = None, **kw) -> dict:
+        error: Optional[str] = None,
+        nav_active: Optional[str] = None, **kw) -> dict:
     user = getattr(request.state, "user", None) if request else None
     credits = get_credits(user)
     base = {
         "backend_ok": backend.ok,
         "credits": f"{credits:,}" if credits is not None else None,
         "error": error,
+        "nav_active": nav_active,
         "rights_version": RIGHTS_VERSION,
         "rights_text": RIGHTS_TEXT,
         "user": user,
@@ -462,7 +465,7 @@ def dashboard(request: Request, request_error: Optional[str] = Query(None, alias
         ok, p, _ = project_of(pid)
         stage_label = detect_stage(p) if ok and p else "unknown"
         projects.append({"id": pid, "name": name, "stage_label": stage_label})
-    return templates.TemplateResponse(request, "dashboard.html", ctx(request, error=request_error, projects=projects))
+    return templates.TemplateResponse(request, "dashboard.html", ctx(request, error=request_error, projects=projects, nav_active="create"))
 
 
 @app.post("/projects")
@@ -648,6 +651,7 @@ def project_page(request: Request,
         auto = {**auto, "reason": "coming soon. DIY Clips works right now"}
     return templates.TemplateResponse(request, "project.html", ctx(request,
         error=err,
+        nav_active="create",
         project={"id": pid, "name": _g(p, "name", default=pid)},
         stages=stages,
         active_stage=active,
@@ -922,6 +926,155 @@ def settings_byok_delete(request: Request):
         return RedirectResponse(f"/settings?err={_q(res)}", status_code=303)
     return RedirectResponse(
         f"/settings?status={_q('Your key was removed.')}", status_code=303)
+
+
+# ------------------------------------------------------------------ studio
+# Studio mode: power-user timeline view of a project. Same data as the
+# guided flow, presented as an editable scene-by-scene timeline.
+
+def studio_scene_views(pid: str, p: dict) -> list:
+    """Scene views enriched with takes for the Studio timeline."""
+    views = scene_views(p)
+    for v in views:
+        sid = v["id"]
+        ok, takes = bcall(backend.list_takes, pid, sid)
+        cards = []
+        if ok and isinstance(takes, list):
+            sel_id = ""
+            raw = _g(p, "scenes", default=[]) or []
+            for s in raw:
+                if str(_g(s, "scene_id", "id", default="")) == sid:
+                    sel_id = str(_g(s, "selected_take_id", "selected_take", default="") or "")
+                    break
+            for t in takes:
+                tid = str(_g(t, "take_id", "id", default=""))
+                cards.append({
+                    "take_id": tid,
+                    "video_url": media_url(_g(t, "video_url", "url", "path", "file"), pid),
+                    "sha_short": (str(_g(t, "sha256", "sha", "hash", default="") or "")[:12] or "-"),
+                    "selected": bool(sel_id and tid == sel_id) or bool(_g(t, "selected")),
+                })
+        v["takes"] = cards
+        # Download URL: selected take, or first take.
+        dl = None
+        for c in cards:
+            if c["selected"]:
+                dl = c["video_url"]
+                break
+        v["download_url"] = dl or (cards[0]["video_url"] if cards else None)
+        v["status"] = "has takes" if cards else ("planned" if v["prompt"] else "no plan")
+    return views
+
+
+@app.get("/studio", response_class=HTMLResponse)
+def studio_index(request: Request):
+    user = require_user(request)
+    projects = []
+    for item in registry_list(user["id"]):
+        pid = item.get("id", "")
+        name = item.get("name", pid)
+        ok, p, _ = project_of(pid)
+        if not ok or not p:
+            continue
+        scenes = _g(p, "scenes", default=[]) or []
+        projects.append({
+            "id": pid, "name": name,
+            "stage_label": detect_stage(p),
+            "scene_count": len(scenes) if isinstance(scenes, list) else 0,
+        })
+    return templates.TemplateResponse(request, "studio.html",
+        ctx(request, projects=projects, nav_active="studio"))
+
+
+@app.get("/studio/{pid}", response_class=HTMLResponse)
+def studio_project(request: Request, pid: str,
+                   err: Optional[str] = Query(None),
+                   status: Optional[str] = Query(None)):
+    user = require_user(request)
+    ok, p, perr = project_of(pid)
+    if not ok:
+        return templates.TemplateResponse(request, "studio.html",
+            ctx(request, error=perr or "Project not found", projects=[],
+                nav_active="studio"), status_code=404)
+    # Ownership check (same as project_page).
+    owner_id = p.get("owner_id") if isinstance(p, dict) else None
+    if owner_id is None:
+        for item in registry_list():
+            if item.get("id") == pid:
+                owner_id = item.get("owner_id")
+                break
+    if owner_id and owner_id != user["id"]:
+        return RedirectResponse("/studio?err=Project+not+found", status_code=303)
+    scenes = studio_scene_views(pid, p)
+    return templates.TemplateResponse(request, "studio_project.html", ctx(
+        request, error=err, notice=status, nav_active="studio",
+        project={"id": pid, "name": _g(p, "name", default=pid)},
+        scenes=scenes,
+    ))
+
+
+@app.post("/studio/{pid}/scene/{sid}/prompt")
+def studio_save_prompt(request: Request, pid: str, sid: str,
+                       prompt: str = Form(...)):
+    require_user(request)
+    ok, res = bcall(backend.update_scene_prompt, pid, sid, prompt)
+    if not ok:
+        return RedirectResponse(
+            f"/studio/{pid}?err={_q(res)}#scene-{sid}", status_code=303)
+    return RedirectResponse(
+        f"/studio/{pid}?status={_q('Prompt saved.')}#scene-{sid}",
+        status_code=303)
+
+
+# ------------------------------------------------------------------ tools (public)
+
+@app.get("/tools", response_class=HTMLResponse)
+def tools_page(request: Request):
+    return templates.TemplateResponse(request, "tools.html",
+        ctx(request, nav_active="tools"))
+
+
+# ------------------------------------------------------------------ wiki (public)
+
+@app.get("/wiki", response_class=HTMLResponse)
+def wiki_page(request: Request):
+    return templates.TemplateResponse(request, "wiki.html",
+        ctx(request, nav_active="wiki"))
+
+
+# ------------------------------------------------------------------ account
+
+def _fmt_ledger_history(entries: list) -> list:
+    out = []
+    for e in entries:
+        if not isinstance(e, dict):
+            continue
+        ts = str(e.get("created_at", ""))[:16].replace("T", " ")
+        out.append({
+            "when": ts or "—",
+            "kind": str(e.get("kind", "?")),
+            "memo": str(e.get("memo", "") or ""),
+            "credits": e.get("credits", 0),
+        })
+    return out
+
+
+@app.get("/account", response_class=HTMLResponse)
+def account_page(request: Request):
+    user = require_user(request)
+    ok, hist = bcall(backend.ledger_history,
+                     authmod.ledger_account_id(user), 50)
+    history = _fmt_ledger_history(hist) if ok and isinstance(hist, list) else []
+    # Format the member-since timestamp.
+    if user.get("created_at"):
+        try:
+            from datetime import datetime, timezone
+            dt = datetime.fromtimestamp(int(user["created_at"]), tz=timezone.utc)
+            user = {**user, "created_at": dt.strftime("%B %Y")}
+        except Exception:
+            user = {**user, "created_at": ""}
+    return templates.TemplateResponse(request, "account.html",
+        ctx(request, nav_active="account", history=history))
 
 
 # ------------------------------------------------------------------ paywall

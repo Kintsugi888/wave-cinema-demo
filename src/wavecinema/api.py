@@ -473,6 +473,32 @@ def character_image_path(project_id: str, character_id: str) -> str:
     return str(_characters.character_image_path(project_id, character_id))
 
 
+def update_scene_prompt(project_id: str, scene_id: str, prompt: str) -> dict:
+    """Update a scene's prompt in the stored director plan (Studio editing)."""
+    ws = _workspace.ProjectWorkspace.load(project_id)
+    plan = ws.state.get("plan")
+    if not isinstance(plan, dict) or not plan.get("scenes"):
+        raise ValueError(f"project {project_id} has no director plan yet")
+    prompt = (prompt or "").strip()
+    if not prompt:
+        raise ValueError("prompt cannot be empty")
+    if len(prompt) > 8000:
+        raise ValueError("prompt is too long (max 8000 characters)")
+    found = False
+    for s in plan["scenes"]:
+        if str(s.get("scene_id", s.get("id", ""))) == str(scene_id):
+            s["prompt"] = prompt
+            s["prompt_edited"] = True
+            found = True
+            break
+    if not found:
+        raise ValueError(f"scene {scene_id} not found in plan")
+    rev = ws.revision
+    ws.log_event(f"studio: prompt edited for scene {scene_id}")
+    ws.save(expected_revision=rev)
+    return {"scene_id": scene_id, "prompt": prompt}
+
+
 # ---------------------------------------------------------------- BYOK
 
 def byok_status(user_id: str | None = None) -> dict:
@@ -495,6 +521,11 @@ def byok_clear_key(user_id: str | None = None) -> dict:
 def credit_balance(account_id: str = DEFAULT_ACCOUNT) -> int:
     """Available (unreserved) credit balance for an account."""
     return _ledger.Ledger().balance(account_id)
+
+
+def ledger_history(account_id: str = DEFAULT_ACCOUNT, limit: int = 50) -> list:
+    """Recent ledger entries for an account, newest first."""
+    return _ledger.Ledger().history(account_id, limit=limit)
 
 
 def get_balance(account_id: str) -> int:
@@ -526,11 +557,12 @@ __all__ = [
     "slice_scenes", "quote_scene", "approve_quote", "generate_scene",
     "list_takes", "select_take", "reroll_scene", "assemble", "export",
     "get_project", "credit_balance", "get_balance", "grant_credits",
+    "ledger_history",
     "set_provider", "get_provider",
     "export_job_pack", "import_job_clips",
     "get_provider_lane", "set_provider_lane", "cloud_available",
     "key_source", "auto_generation_available",
     "add_character", "list_characters", "remove_character",
-    "character_image_path",
+    "character_image_path", "update_scene_prompt",
     "byok_status", "byok_set_key", "byok_clear_key",
 ]

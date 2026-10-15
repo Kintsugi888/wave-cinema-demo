@@ -1,0 +1,104 @@
+{% extends "base.html" %}
+{% block title %}Director's Wiki{% endblock %}
+{% block content %}
+<h1 class="hero-title">DIRECTOR'S WIKI</h1>
+<p class="subtle">The craft behind the machine. Short guides on making music videos that actually land.</p>
+
+<div class="wiki-toc panel">
+  <h2>Guides</h2>
+  <ul class="toc-list">
+    <li><a href="#planning">Planning your music video</a></li>
+    <li><a href="#directing">Directing scenes</a></li>
+    <li><a href="#casting">Casting characters</a></li>
+    <li><a href="#cutting">Cutting and assembly</a></li>
+    <li><a href="#aspect">Aspect ratios explained</a></li>
+    <li><a href="#credits">Credits and billing explained</a></li>
+  </ul>
+</div>
+
+<div class="panel wiki-article" id="planning">
+  <h2>Planning your music video</h2>
+  <p>Every great music video starts before a single frame is generated. Wave Cinema's director does the heavy lifting, but the plan is yours.</p>
+  <h3>1. Know your song's shape</h3>
+  <p>Upload your track and let the transcription map it out. Listen for the structure: intro, verse, pre-chorus, chorus, bridge, outro. Each section wants a different visual energy — the chorus should feel bigger than the verse, or the whole thing goes flat.</p>
+  <h3>2. Find your story beats</h3>
+  <p>A music video doesn't need a plot, but it needs <em>beats</em> — moments where the visuals shift. Write 3–5 in your treatment: "opens alone in neon rain," "chorus explodes into a crowd," "bridge strips back to a single close-up." The director turns these into timed scenes.</p>
+  <h3>3. Write a treatment, not a script</h3>
+  <p>The treatment field on the Direct stage is your pitch to the AI. Describe mood, setting, and motion — not dialogue. "Slow push through a chrome city at night, rain on glass, lonely but electric" beats a paragraph of backstory every time.</p>
+</div>
+
+<div class="panel wiki-article" id="directing">
+  <h2>Directing scenes</h2>
+  <p>The director breaks your song into 5–15 second scenes and writes a generation prompt for each. Here's the language it speaks.</p>
+  <h3>Shot language</h3>
+  <p>Prompts use real cinematography terms: <span class="mono">wide shot, medium shot, close-up, extreme close-up, aerial, tracking shot, dolly-in, handheld</span>. If you edit a prompt in Studio mode, use these words — the generator understands them.</p>
+  <h3>Camera grammar</h3>
+  <p>One move per scene. A slow push-in says intimacy; a fast lateral track says energy; a locked-off static frame says confidence. Mixing three camera moves in one 8-second scene reads as chaos, not dynamism.</p>
+  <h3>Continuity anchors</h3>
+  <p>The director writes identity locks into every prompt — palette, lighting, wardrobe, setting details. These are what keep scene 7 looking like it belongs with scene 2. Don't delete them when editing prompts in Studio.</p>
+  <h3>Lyric sync</h3>
+  <p>Scenes are timed to the song's word timing. A scene change landing on a downbeat or a lyric punchline feels intentional; landing mid-phrase feels like a mistake. Trust the timing, then adjust in Studio if a cut feels off.</p>
+</div>
+
+<div class="panel wiki-article" id="casting">
+  <h2>Casting characters</h2>
+  <p>Character references are how your people stay <em>your people</em> across every scene.</p>
+  <h3>What makes a good reference</h3>
+  <p>One clear, front-facing image per character. Good lighting, plain background, face clearly visible. JPG or PNG, under 10 MB. You can add up to 10 characters per project, and up to 9 reference images travel with each generated scene.</p>
+  <h3>Consistency is the whole game</h3>
+  <p>The generator sees your reference and the prompt's identity locks together. Name your character in the prompt ("Maya, 20s, silver jacket") and the reference handles the face. If a take comes back off-model, reroll — don't accept a stranger wearing your character's name.</p>
+  <h3>When to skip characters</h3>
+  <p>Abstract visuals, landscapes, and lyric videos don't need a cast. An empty cast list tells the director to go full atmosphere — sometimes that's the stronger choice.</p>
+</div>
+
+<div class="panel wiki-article" id="cutting">
+  <h2>Cutting and assembly</h2>
+  <p>Generation gives you takes. Assembly gives you a film. The Review stage is where taste lives.</p>
+  <h3>Pick takes like an editor</h3>
+  <p>Watch every take for a scene before selecting. You're looking for the one where the motion, framing, and energy match the song section — not necessarily the prettiest frame. A slightly rough take that <em>moves</em> right beats a perfect still.</p>
+  <h3>Reroll with intent</h3>
+  <p>Rerolling re-runs the same prompt. If two rerolls miss, the prompt is the problem — edit it in Studio mode (tighten the shot language, simplify the action) before spending another generation.</p>
+  <h3>Pacing</h3>
+  <p>Cut on the beat. If a scene feels long, it probably is — but resist trimming scenes in a music video the way you would in narrative film. The song is the edit; your job is selecting takes that serve it.</p>
+  <h3>The master</h3>
+  <p>Assembly stitches your selected takes with the original song, server-side, at no extra charge. Download the MP4, watch it on a phone and a big screen, then decide if any scene needs another pass.</p>
+</div>
+
+<div class="panel wiki-article" id="aspect">
+  <h2>Aspect ratios explained</h2>
+  <p>Where your video lives decides its shape. Pick before you generate — reframing after the fact always costs you composition.</p>
+  <ul class="aspect-list">
+    <li><strong>16:9 — Landscape.</strong> YouTube, the default. Cinematic, roomy, the safe choice for a "real" music video.</li>
+    <li><strong>9:16 — Vertical.</strong> Shorts, Reels, TikTok. Tight framing, faces and motion fill the frame. Compose close — wide shots die in vertical.</li>
+    <li><strong>1:1 — Square.</strong> Feed posts. A compromise that works everywhere and excels nowhere; good for teasers.</li>
+    <li><strong>21:9 — Ultrawide.</strong> Statement pieces. Enormous scope, but letterboxed everywhere except dedicated players.</li>
+    <li><strong>4:3 — Classic.</strong> Nostalgia, lo-fi aesthetics, archival vibes. A deliberate style choice, not a default.</li>
+  </ul>
+  <p>Rule of thumb: generate in the ratio you'll publish in. The free <a href="/tools" style="color:#1677FF">Aspect Cropper</a> can rescue a wrong choice, but a native composition always wins.</p>
+</div>
+
+<div class="panel wiki-article" id="credits">
+  <h2>Credits and billing explained</h2>
+  <p>Wave Cinema runs on prepaid credits. No subscriptions, no surprises.</p>
+  <h3>How credits work</h3>
+  <p>Buy a credit pack on the <a href="/billing" style="color:#1677FF">Billing</a> page. Before any paid generation, you get an exact quote — you approve it, or nothing happens. Failed renders release the hold automatically; you're never charged for something that didn't generate.</p>
+  <h3>What's free</h3>
+  <p>Planning, directing, reviewing takes, downloading, assembly, the <a href="/tools" style="color:#1677FF">free tools</a>, and the Wiki cost nothing. Credits only move when you approve a generation.</p>
+  <h3>Bring your own key</h3>
+  <p>Paste your own Higgsfield API key in <a href="/settings" style="color:#1677FF">Settings</a> and generation bills your Higgsfield account directly — zero Wave Cinema credits. Your key is encrypted at rest and never shown again.</p>
+  <h3>DIY lane</h3>
+  <p>Generate clips anywhere, upload them back as a zip, and assemble here for free. The pipeline doesn't care where the pixels came from.</p>
+</div>
+
+<style>
+.wiki-toc .toc-list{list-style:none;padding:0;margin:0;display:grid;
+  grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:8px}
+.wiki-toc .toc-list a{color:#1677FF;text-decoration:none;font-size:15px;font-weight:600}
+.wiki-toc .toc-list a:hover{text-decoration:underline}
+.wiki-article h3{color:#C5D0E0;font-size:16px;margin:20px 0 8px}
+.wiki-article p,.wiki-article li{color:#8fa1bd;line-height:1.7;font-size:15px}
+.wiki-article strong{color:#C5D0E0}
+.aspect-list{list-style:none;padding:0}
+.aspect-list li{margin-bottom:10px;padding-left:4px}
+</style>
+{% endblock %}

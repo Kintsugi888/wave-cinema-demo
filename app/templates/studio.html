@@ -1,0 +1,23 @@
+{% extends "base.html" %}
+{% block title %}Studio{% endblock %}
+{% block content %}
+<h1 class="hero-title">STUDIO</h1>
+<p class="subtle">The power-user timeline. Pick a film to direct it scene by scene — edit prompts, reroll takes, download individual scenes.</p>
+
+<div class="panel">
+  <h2>Your Films</h2>
+  {% if projects %}
+  <div class="grid cols-3">
+    {% for p in projects %}
+    <a class="card" href="/studio/{{ p.id }}" style="text-decoration:none;color:inherit">
+      <h3>{{ p.name }}</h3>
+      <div class="meta mono">{{ p.id }}</div>
+      <div class="meta">{{ p.scene_count }} scenes · Stage: {{ p.stage_label }}</div>
+    </a>
+    {% endfor %}
+  </div>
+  {% else %}
+  <p class="subtle">No projects yet. <a href="/" style="color:#1677FF">Create your first film</a> to open it in Studio.</p>
+  {% endif %}
+</div>
+{% endblock %}

@@ -1,0 +1,199 @@
+{% extends "base.html" %}
+{% block title %}Free Tools{% endblock %}
+{% block content %}
+<h1 class="hero-title">FREE TOOLS</h1>
+<p class="subtle">No sign-in needed. Everything runs in your browser — your files never leave your device.</p>
+
+<div class="panel">
+  <h2>🎵 Song Trimmer</h2>
+  <p class="subtle">Upload audio, pick start/end times, download the trimmed clip.</p>
+  <input type="file" id="trim-file" accept="audio/*" class="file-input">
+  <div id="trim-controls" style="display:none;margin-top:14px">
+    <audio id="trim-audio" controls style="width:100%"></audio>
+    <div class="tool-row">
+      <label>Start (s): <input type="number" id="trim-start" value="0" min="0" step="0.1" class="num-input"></label>
+      <label>End (s): <input type="number" id="trim-end" value="30" min="0" step="0.1" class="num-input"></label>
+      <span id="trim-duration" class="mono subtle"></span>
+    </div>
+    <button id="trim-btn" class="primary">Trim &amp; Download</button>
+    <p class="hint" id="trim-status"></p>
+  </div>
+</div>
+
+<div class="panel">
+  <h2>🎬 Video Clipper</h2>
+  <p class="subtle">Upload video, set start/end times, download the clip. Uses the browser's MediaRecorder — fast, no re-encode wait.</p>
+  <input type="file" id="clip-file" accept="video/*" class="file-input">
+  <div id="clip-controls" style="display:none;margin-top:14px">
+    <video id="clip-video" controls style="width:100%;max-height:320px;border-radius:8px"></video>
+    <div class="tool-row">
+      <label>Start (s): <input type="number" id="clip-start" value="0" min="0" step="0.1" class="num-input"></label>
+      <label>End (s): <input type="number" id="clip-end" value="10" min="0" step="0.1" class="num-input"></label>
+    </div>
+    <button id="clip-btn" class="primary">Clip &amp; Download</button>
+    <p class="hint" id="clip-status"></p>
+  </div>
+</div>
+
+<div class="panel">
+  <h2>📐 Aspect Cropper</h2>
+  <p class="subtle">Upload video, pick a target aspect ratio, download the center-cropped version. Renders frame-by-frame on a canvas.</p>
+  <input type="file" id="crop-file" accept="video/*" class="file-input">
+  <div id="crop-controls" style="display:none;margin-top:14px">
+    <video id="crop-video" controls style="width:100%;max-height:320px;border-radius:8px"></video>
+    <div class="tool-row">
+      <label>Aspect:
+        <select id="crop-aspect" class="num-input">
+          <option value="16:9">16:9 — Landscape</option>
+          <option value="9:16">9:16 — Vertical / Shorts</option>
+          <option value="1:1">1:1 — Square</option>
+          <option value="21:9">21:9 — Ultrawide</option>
+          <option value="4:3">4:3 — Classic</option>
+        </select>
+      </label>
+    </div>
+    <button id="crop-btn" class="primary">Crop &amp; Download</button>
+    <p class="hint" id="crop-status"></p>
+  </div>
+</div>
+
+<style>
+.file-input{margin:8px 0;padding:10px;background:#080D18;border:1px dashed #24406e;
+  border-radius:8px;color:#C5D0E0;width:100%;box-sizing:border-box}
+.tool-row{display:flex;gap:16px;align-items:center;margin:12px 0;flex-wrap:wrap;color:#C5D0E0;font-size:14px}
+.num-input{background:#080D18;border:1px solid #24406e;color:#F4F8FF;border-radius:6px;
+  padding:8px 10px;font-size:14px;width:90px}
+.num-input:focus{outline:none;border-color:#1677FF}
+select.num-input{width:auto}
+</style>
+
+<script>
+// ---------- Song trimmer (Web Audio API) ----------
+(function(){
+  var fileInput=document.getElementById('trim-file'), audio=document.getElementById('trim-audio'),
+      controls=document.getElementById('trim-controls'), status=document.getElementById('trim-status'),
+      buf=null, actx=null;
+  fileInput.addEventListener('change',function(){
+    var f=fileInput.files[0]; if(!f) return;
+    audio.src=URL.createObjectURL(f); controls.style.display='block'; status.textContent='';
+    actx=actx||new (window.AudioContext||window.webkitAudioContext)();
+    var rd=new FileReader();
+    rd.onload=function(){ actx.decodeAudioData(rd.result,function(b){
+      buf=b; document.getElementById('trim-duration').textContent='Duration: '+b.duration.toFixed(1)+'s';
+      document.getElementById('trim-end').value=Math.min(30,b.duration).toFixed(1);
+    },function(){status.textContent='Could not decode that audio file.';}); };
+    rd.readAsArrayBuffer(f);
+  });
+  document.getElementById('trim-btn').addEventListener('click',function(){
+    if(!buf){status.textContent='Load an audio file first.';return;}
+    var s=parseFloat(document.getElementById('trim-start').value)||0,
+        e=parseFloat(document.getElementById('trim-end').value)||buf.duration;
+    if(e<=s||s<0||e>buf.duration){status.textContent='Check your start/end times.';return;}
+    status.textContent='Rendering…';
+    var sr=buf.sampleRate, start=Math.floor(s*sr), end=Math.floor(e*sr), len=end-start,
+        out=actx.createBuffer(buf.numberOfChannels,len,sr);
+    for(var c=0;c<buf.numberOfChannels;c++){
+      out.getChannelData(c).set(buf.getChannelData(c).subarray(start,end));
+    }
+    // Encode as WAV
+    var wav=encodeWav(out), blob=new Blob([wav],{type:'audio/wav'}),
+        a=document.createElement('a');
+    a.href=URL.createObjectURL(blob); a.download='trimmed.wav'; a.click();
+    status.textContent='Done — trimmed clip downloaded as WAV.';
+  });
+  function encodeWav(b){
+    var nCh=b.numberOfChannels, sr=b.sampleRate, len=b.length*nCh*2,
+        ab=new ArrayBuffer(44+len), v=new DataView(ab), off=44;
+    function ws(o,s){for(var i=0;i<s.length;i++)v.setUint8(o+i,s.charCodeAt(i));}
+    ws(0,'RIFF'); v.setUint32(4,36+len,true); ws(8,'WAVE'); ws(12,'fmt ');
+    v.setUint32(16,16,true); v.setUint16(20,1,true); v.setUint16(22,nCh,true);
+    v.setUint32(24,sr,true); v.setUint32(28,sr*nCh*2,true);
+    v.setUint16(32,nCh*2,true); v.setUint16(34,16,true); ws(36,'data');
+    v.setUint32(40,len,true);
+    for(var i=0;i<b.length;i++) for(var c=0;c<nCh;c++){
+      var s=Math.max(-1,Math.min(1,b.getChannelData(c)[i]));
+      v.setInt16(off,s<0?s*0x8000:s*0x7FFF,true); off+=2;
+    }
+    return ab;
+  }
+})();
+
+// ---------- Video clipper (MediaRecorder) ----------
+(function(){
+  var fileInput=document.getElementById('clip-file'), video=document.getElementById('clip-video'),
+      controls=document.getElementById('clip-controls'), status=document.getElementById('clip-status');
+  fileInput.addEventListener('change',function(){
+    var f=fileInput.files[0]; if(!f) return;
+    video.src=URL.createObjectURL(f); controls.style.display='block'; status.textContent='';
+  });
+  document.getElementById('clip-btn').addEventListener('click',function(){
+    var s=parseFloat(document.getElementById('clip-start').value)||0,
+        e=parseFloat(document.getElementById('clip-end').value)||0;
+    if(e<=s){status.textContent='End must be after start.';return;}
+    if(!video.src){status.textContent='Load a video first.';return;}
+    status.textContent='Recording clip… play it through, then it downloads automatically.';
+    video.currentTime=s; video.play();
+    var stream=video.captureStream(),
+        rec=new MediaRecorder(stream,{mimeType:'video/webm'}),
+        chunks=[];
+    rec.ondataavailable=function(ev){if(ev.data.size)chunks.push(ev.data);};
+    rec.onstop=function(){
+      var blob=new Blob(chunks,{type:'video/webm'}),
+          a=document.createElement('a');
+      a.href=URL.createObjectURL(blob); a.download='clip.webm'; a.click();
+      status.textContent='Done — clip downloaded as WebM.';
+    };
+    rec.start();
+    var timer=setInterval(function(){
+      if(video.currentTime>=e||video.ended){
+        clearInterval(timer); rec.stop(); video.pause();
+      }
+    },100);
+  });
+})();
+
+// ---------- Aspect cropper (canvas) ----------
+(function(){
+  var fileInput=document.getElementById('crop-file'), video=document.getElementById('crop-video'),
+      controls=document.getElementById('crop-controls'), status=document.getElementById('crop-status');
+  fileInput.addEventListener('change',function(){
+    var f=fileInput.files[0]; if(!f) return;
+    video.src=URL.createObjectURL(f); controls.style.display='block'; status.textContent='';
+  });
+  document.getElementById('crop-btn').addEventListener('click',function(){
+    if(!video.src||!video.videoWidth){status.textContent='Load a video first.';return;}
+    var parts=document.getElementById('crop-aspect').value.split(':'),
+        targetW=parseInt(parts[0]), targetH=parseInt(parts[1]),
+        sw=video.videoWidth, sh=video.videoHeight,
+        targetRatio=targetW/targetH, srcRatio=sw/sh,
+        cw,ch;
+    if(srcRatio>targetRatio){ ch=sh; cw=sh*targetRatio; }
+    else { cw=sw; ch=sw/targetRatio; }
+    var sx=(sw-cw)/2, sy=(sh-ch)/2,
+        canvas=document.createElement('canvas');
+    canvas.width=Math.round(cw); canvas.height=Math.round(ch);
+    var ctx=canvas.getContext('2d');
+    status.textContent='Rendering cropped video…';
+    video.currentTime=0; video.play();
+    var stream=canvas.captureStream(30),
+        rec=new MediaRecorder(stream,{mimeType:'video/webm'}),
+        chunks=[];
+    rec.ondataavailable=function(ev){if(ev.data.size)chunks.push(ev.data);};
+    rec.onstop=function(){
+      var blob=new Blob(chunks,{type:'video/webm'}),
+          a=document.createElement('a');
+      a.href=URL.createObjectURL(blob);
+      a.download='cropped-'+targetW+'x'+targetH+'.webm'; a.click();
+      status.textContent='Done — cropped video downloaded.';
+    };
+    function draw(){
+      if(video.ended||video.paused&&video.currentTime>=video.duration){rec.stop();return;}
+      ctx.drawImage(video,sx,sy,cw,ch,0,0,canvas.width,canvas.height);
+      requestAnimationFrame(draw);
+    }
+    rec.start(); draw();
+    video.onended=function(){rec.stop();};
+  });
+})();
+</script>
+{% endblock %}

@@ -1,0 +1,93 @@
+{% extends "base.html" %}
+{% block title %}Studio — {{ project.name }}{% endblock %}
+{% block content %}
+<p><a href="/studio" style="color:#1677FF;text-decoration:none">&larr; All films</a>
+  &nbsp;·&nbsp; <a href="/project/{{ project.id }}" style="color:#1677FF;text-decoration:none">Guided view &rarr;</a></p>
+<h1 class="hero-title">{{ project.name }}</h1>
+<p class="subtle mono">{{ project.id }}</p>
+
+{% if scenes %}
+<div class="panel">
+  <h2>Scene Timeline — {{ scenes|length }} scene{{ "s" if scenes|length != 1 else "" }}</h2>
+  <p class="hint">Edit any prompt and save it. Reroll regenerates the scene. Downloads grab the selected take.</p>
+  {% for s in scenes %}
+  <div class="scene-row" id="scene-{{ s.id }}">
+    <div class="scene-head">
+      <span class="scene-num">SCENE {{ s.n + 1 }}</span>
+      <span class="mono subtle">{{ s.start }} &rarr; {{ s.end }}</span>
+      {% if s.cast and s.cast != "-" %}<span class="cast-tag">{{ s.cast }}</span>{% endif %}
+      {% if s.status %}<span class="status-tag">{{ s.status }}</span>{% endif %}
+    </div>
+    <form method="post" action="/studio/{{ project.id }}/scene/{{ s.id }}/prompt" class="scene-prompt-form">
+      <label class="field" for="prompt-{{ s.id }}">Prompt</label>
+      <textarea id="prompt-{{ s.id }}" name="prompt" rows="4" class="prompt-edit">{{ s.prompt }}</textarea>
+      <div class="scene-actions">
+        <input type="submit" class="primary" value="Save prompt">
+    </form>
+        <form method="post" action="/project/{{ project.id }}/reroll" style="display:inline">
+          <input type="hidden" name="scene_id" value="{{ s.id }}">
+          <input type="submit" class="btn" value="Reroll scene" onclick="return confirm('Regenerate this scene? This spends credits.')">
+        </form>
+        {% if s.download_url %}
+        <a class="btn" href="{{ s.download_url }}" download>Download take</a>
+        {% endif %}
+      </div>
+    {% if s.takes %}
+    <details class="takes-detail">
+      <summary>{{ s.takes|length }} take{{ "s" if s.takes|length != 1 else "" }}</summary>
+      <div class="takes-row">
+        {% for t in s.takes %}
+        <div class="take-card{% if t.selected %} selected{% endif %}">
+          {% if t.video_url %}
+          <video src="{{ t.video_url }}" controls preload="metadata" playsinline style="width:100%;border-radius:8px"></video>
+          {% else %}
+          <div class="take-placeholder">No preview</div>
+          {% endif %}
+          <div class="meta mono">{{ t.sha_short }}</div>
+          <form method="post" action="/project/{{ project.id }}/select" style="margin-top:6px">
+            <input type="hidden" name="scene_id" value="{{ s.id }}">
+            <input type="hidden" name="take_id" value="{{ t.take_id }}">
+            {% if t.selected %}
+            <span class="selected-label">✓ Selected</span>
+            {% else %}
+            <input type="submit" class="btn" value="Select take">
+            {% endif %}
+          </form>
+        </div>
+        {% endfor %}
+      </div>
+    </details>
+    {% endif %}
+  </div>
+  {% endfor %}
+</div>
+{% else %}
+<div class="panel">
+  <h2>No scenes yet</h2>
+  <p class="subtle">Run the director on the <a href="/project/{{ project.id }}?stage=direct" style="color:#1677FF">guided view</a> first — scenes appear here once the plan exists.</p>
+</div>
+{% endif %}
+<style>
+.scene-row{background:#0d1526;border:1px solid #1c2942;border-radius:12px;
+  padding:18px;margin-bottom:16px}
+.scene-head{display:flex;align-items:center;gap:12px;margin-bottom:12px;flex-wrap:wrap}
+.scene-num{font-family:'Space Grotesk',sans-serif;font-weight:700;color:#1677FF;
+  font-size:14px;letter-spacing:.06em}
+.cast-tag{background:#142B52;color:#C5D0E0;padding:4px 10px;border-radius:20px;font-size:12px}
+.status-tag{background:#1c2942;color:#8fa1bd;padding:4px 10px;border-radius:20px;font-size:12px}
+.scene-prompt-form .field{display:block;margin-bottom:6px;color:#C5D0E0;font-size:13px;font-weight:600}
+.prompt-edit{width:100%;box-sizing:border-box;background:#080D18;border:1px solid #24406e;
+  color:#F4F8FF;border-radius:8px;padding:12px;font-family:'JetBrains Mono',monospace;
+  font-size:13px;resize:vertical}
+.prompt-edit:focus{outline:none;border-color:#1677FF}
+.scene-actions{display:flex;gap:10px;margin-top:10px;flex-wrap:wrap;align-items:center}
+.takes-detail{margin-top:14px}
+.takes-detail summary{cursor:pointer;color:#8fa1bd;font-size:14px;padding:8px 0}
+.takes-row{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:12px;margin-top:10px}
+.take-card{background:#080D18;border:1px solid #1c2942;border-radius:10px;padding:10px}
+.take-card.selected{border-color:#1677FF}
+.take-placeholder{background:#142B52;border-radius:8px;height:120px;display:flex;
+  align-items:center;justify-content:center;color:#5b6b87;font-size:13px}
+.selected-label{color:#2ecc71;font-weight:600;font-size:14px}
+</style>
+{% endblock %}
