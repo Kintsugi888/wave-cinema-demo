@@ -270,7 +270,8 @@ _FONTS = """
 """
 
 
-def _page(title: str, body: str) -> str:
+def _page(title: str, body: str, test_mode: bool = True) -> str:
+    mode_text = " · Test mode" if test_mode else ""
     return f"""<!doctype html>
 <html lang="en"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
@@ -278,7 +279,7 @@ def _page(title: str, body: str) -> str:
 <body><div class="wrap">
 <div class="wordmark">WAVE CINEMA</div>
 {body}
-<div class="footer">WAVE CINEMA · AI-Powered Film Studio · Prepaid credits · Test mode · Credits have no cash value and are non-transferable.</div>
+<div class="footer">WAVE CINEMA · AI-Powered Film Studio · Prepaid credits{mode_text} · Credits have no cash value and are non-transferable.</div>
 </div></body></html>"""
 
 
@@ -335,7 +336,7 @@ document.querySelectorAll('button.buy').forEach(b=>b.addEventListener('click',as
   b.disabled=false; b.textContent='Buy '+b.dataset.pack+' credits';
 }}));
 </script>"""
-    return _page("Billing", body)
+    return _page("Billing", body, test_mode=not _looks_live(_env("STRIPE_SECRET_KEY")))
 
 
 def _not_configured_page(problems) -> str:
@@ -349,7 +350,7 @@ def _not_configured_page(problems) -> str:
   <ul>{items}</ul>
   <p>See <span class="mono">app/paywall_config.md</span> for setup instructions.</p>
 </div>"""
-    return _page("Billing: not configured", body)
+    return _page("Billing: not configured", body, test_mode=not _looks_live(_env("STRIPE_SECRET_KEY")))
 
 
 def _success_page() -> str:
@@ -364,7 +365,7 @@ def _success_page() -> str:
   or pay again. Your balance updates on the <a href="/billing">billing page</a> once
   the webhook lands.</p>
 </div>"""
-    return _page("Payment successful", body)
+    return _page("Payment successful", body, test_mode=not _looks_live(_env("STRIPE_SECRET_KEY")))
 
 
 # --- endpoints ----------------------------------------------------------------
