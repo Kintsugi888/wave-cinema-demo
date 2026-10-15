@@ -218,15 +218,26 @@ def scene0_selected(p: dict, scenes: list) -> bool:
 
 def scene_views(p: dict) -> list:
     raw = _g(p, "scenes", "plan_scenes", default=[]) or []
+    # Merge director plan data (prompts, cast) into the scene views.
+    plan_scenes = {}
+    plan = p.get("plan") if isinstance(p.get("plan"), dict) else None
+    if plan:
+        for ps in plan.get("scenes", []) or []:
+            pid = str(_g(ps, "scene_id", "id", default=""))
+            if pid:
+                plan_scenes[pid] = ps
     first_ok = scene0_selected(p, raw if isinstance(raw, list) else [])
     views = []
     quotes = pending_quotes().get(p.get("id", ""), {})
     for i, s in enumerate(raw):
         sid = str(_g(s, "scene_id", "id", "index", default=i))
-        cast = _g(s, "cast", "characters", default="-")
+        ps = plan_scenes.get(sid, {})
+        cast = _g(s, "cast", "characters", default=None)
+        if cast is None or cast == "-":
+            cast = _g(ps, "cast", default="-")
         if isinstance(cast, list):
             cast = ", ".join(str(c) for c in cast)
-        prompt = str(_g(s, "prompt", "scene_prompt", default=""))
+        prompt = str(_g(s, "prompt", "scene_prompt", default="") or _g(ps, "prompt", default=""))
         q = quotes.get(sid)
         views.append({
             "id": sid,
