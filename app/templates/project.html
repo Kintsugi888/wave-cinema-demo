@@ -87,7 +87,7 @@
   </dl>
   <p><a class="btn" href="/project/{{ project.id }}?stage=direct">Continue to directing &rarr;</a></p>
   {% else %}
-  <form method="post" action="/project/{{ project.id }}/ingest" enctype="multipart/form-data">
+  <form method="post" action="/project/{{ project.id }}/ingest" enctype="multipart/form-data" onsubmit="this.querySelector('input[type=submit]').value='Uploading…';this.querySelector('input[type=submit]').disabled=true;">
     <label class="field" for="song">Your song</label>
     <input type="file" id="song" name="song" accept=".mp3,.wav,.m4a,.aac,.ogg,.oga,.flac,audio/*" required
       {% if not backend_ok %}disabled{% endif %}>
