@@ -1011,7 +1011,7 @@ def character_sheet_page(request: Request, pid: str,
                          status: Optional[str] = Query(None),
                          tab: str = Query("character")):
     user = require_user(request)
-    ok, p = project_of(pid)
+    ok, p, _perr = project_of(pid)
     if not ok:
         return RedirectResponse("/", status_code=303)
     key_ok, ks = bcall(backend.gemini_status, user["id"])
