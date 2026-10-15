@@ -1,0 +1,10 @@
+services:
+  - type: web
+    name: wave-cinema
+    runtime: python
+    plan: free
+    buildCommand: pip install -r requirements.render.txt
+    startCommand: PYTHONPATH=app:src uvicorn main:app --host 0.0.0.0 --port $PORT
+    envVars:
+      - key: PYTHONUNBUFFERED
+        value: "1"

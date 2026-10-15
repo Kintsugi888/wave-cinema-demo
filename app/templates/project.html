@@ -1,0 +1,223 @@
+{% extends "base.html" %}
+{% block title %}{{ project.name }}{% endblock %}
+{% block content %}
+<p><a href="/">&larr; Dashboard</a></p>
+<h1>{{ project.name }}</h1>
+<p class="subtle mono">{{ project.id }}</p>
+
+<div class="panel lane-picker">
+  <h3>Generation lane</h3>
+  <form method="post" action="/project/{{ project.id }}/lane">
+    <label class="lane-option">
+      <input type="radio" name="lane" value="byo" {% if lane != "cloud" %}checked{% endif %}>
+      <span><strong>Bring your own generation</strong><br>
+      <span class="subtle">Job-pack loop on your own video-gen account. Zero cost to us.</span></span>
+    </label>
+    <label class="lane-option {% if not cloud.ok %}lane-off{% endif %}">
+      <input type="radio" name="lane" value="cloud" {% if lane == "cloud" %}checked{% endif %} {% if not cloud.ok %}disabled{% endif %}>
+      <span><strong>Wave Cinema Cloud</strong><br>
+      <span class="subtle">Our Higgsfield key. Debits your credit balance with margin.</span>
+      {% if not cloud.ok %}<br><span class="subtle">Unavailable: {{ cloud.reason }}</span>{% endif %}</span>
+    </label>
+    <p><input type="submit" class="primary" value="Save lane"></p>
+  </form>
+</div>
+
+<nav class="stepper" aria-label="Pipeline stages">
+  {% for s in stages %}
+  <a class="step {% if s.key == active_stage %}active{% elif s.done %}done{% endif %}"
+     href="/project/{{ project.id }}?stage={{ s.key }}">
+    <span class="num">{{ s.num }}</span>
+    <span>{{ s.label }}</span>
+  </a>
+  {% endfor %}
+</nav>
+
+{% if active_stage == "ingest" %}
+<div class="panel">
+  <h2>01 — Ingest</h2>
+  {% if song %}
+  <dl class="kv">
+    <dt>File</dt><dd>{{ song.filename }}</dd>
+    <dt>Duration</dt><dd class="mono">{{ song.duration }}</dd>
+    <dt>SHA-256</dt><dd class="mono">{{ song.sha256 }}</dd>
+    {% if song.rights_version %}<dt>Rights assent</dt><dd class="mono">{{ song.rights_version }} &middot; recorded</dd>{% endif %}
+  </dl>
+  <p><a class="btn" href="/project/{{ project.id }}?stage=direct">Continue to Direct &rarr;</a></p>
+  {% else %}
+  <form method="post" action="/project/{{ project.id }}/ingest" enctype="multipart/form-data">
+    <label class="field" for="song">Song file (MP3 or WAV)</label>
+    <input type="file" id="song" name="song" accept=".mp3,.wav,audio/mpeg,audio/wav" required
+      {% if not backend_ok %}disabled{% endif %}>
+
+    <label class="field">Rights statement <span class="mono subtle">{{ rights_version }}</span></label>
+    <div class="bible">{{ rights_text }}</div>
+
+    <div class="checkbox-row">
+      <input type="checkbox" id="assent" name="assent" value="yes" required {% if not backend_ok %}disabled{% endif %}>
+      <label for="assent">I confirm I own or control the rights to this song and authorize its use for creating a Wave Cinema music video. I understand this assent is recorded against statement version <span class="mono">{{ rights_version }}</span>.</label>
+    </div>
+
+    <p><input type="submit" class="primary" value="Upload &amp; ingest" {% if not backend_ok %}disabled{% endif %}></p>
+    <p class="hint">Upload is refused without the checkbox. Nothing is generated or spent at this stage.</p>
+  </form>
+  {% endif %}
+</div>
+{% endif %}
+
+{% if active_stage == "direct" %}
+<div class="panel">
+  <h2>02 — Direct</h2>
+  {% if not song %}
+  <p class="subtle">Ingest a song first.</p>
+  <p><a class="btn" href="/project/{{ project.id }}?stage=ingest">Go to Ingest</a></p>
+  {% elif bible %}
+  <h3>Production bible</h3>
+  <div class="bible">{{ bible }}</div>
+  <h3>Scene plan</h3>
+  <div class="table-scroll">
+  <table class="shots">
+    <thead><tr><th>#</th><th>Start</th><th>End</th><th>Cast</th><th>Prompt</th><th>Quote</th></tr></thead>
+    <tbody>
+    {% for sc in scenes %}
+    <tr>
+      <td class="mono">{{ sc.n }}</td>
+      <td class="ts">{{ sc.start }}</td>
+      <td class="ts">{{ sc.end }}</td>
+      <td>{{ sc.cast }}</td>
+      <td>{{ sc.prompt_short }}</td>
+      <td>
+        {% if lane == "cloud" %}
+        {% if sc.quote %}
+          <div class="mono">{{ sc.quote.total }} {{ sc.quote.currency }}</div>
+          <div class="subtle" style="font-size:12px">{{ sc.quote.detail }}</div>
+          {% if sc.gated %}
+          <div class="subtle" style="font-size:12px">Waiting on first-scene review.</div>
+          {% else %}
+          <form method="post" action="/project/{{ project.id }}/approve">
+            <input type="hidden" name="quote_id" value="{{ sc.quote.quote_id }}">
+            <input type="hidden" name="scene_id" value="{{ sc.id }}">
+            <button type="submit" class="primary">Approve &amp; Generate</button>
+          </form>
+          {% endif %}
+        {% elif sc.gated %}
+          <span class="subtle">Waiting on first-scene review.</span>
+        {% else %}
+          <form method="post" action="/project/{{ project.id }}/quote">
+            <input type="hidden" name="scene_id" value="{{ sc.id }}">
+            <button type="submit">Quote</button>
+          </form>
+        {% endif %}
+        {% else %}
+          <span class="subtle">BYO lane — quoting disabled</span>
+        {% endif %}
+      </td>
+    </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  </div>
+  <p class="hint">First-scene gate: scenes after #0 stay gated until scene 0 has a selected take. Quoting and planning are free; approving a quote submits a paid generation.</p>
+
+  {% if lane != "cloud" %}
+  <h3>Bring your own generation (free)</h3>
+  <div class="panel" style="margin-top:12px">
+    <p>Have a working video-gen account of your own? Skip the paid queue: download the job pack, generate one clip per scene on your own Muse, then upload the clips back in <strong>Review</strong>. Zero credits change hands.</p>
+    <p><a class="btn primary" href="/project/{{ project.id }}/jobs/export">Download job pack (.zip)</a></p>
+    <p class="hint">The pack holds every scene prompt, exact timings and the README your generating side follows. Clips come back named <span class="mono">scene_00.mp4 … scene_NN.mp4</span> in a zip.</p>
+  </div>
+  {% else %}
+  <p class="hint">Wave Cinema Cloud lane: quotes above debit your credit balance with margin, generated on our Higgsfield key.</p>
+  {% endif %}
+  {% else %}
+  <form method="post" action="/project/{{ project.id }}/direct">
+    <label class="field" for="treatment">Director treatment</label>
+    <textarea id="treatment" name="treatment" placeholder="Describe the world, the look, the arc of the video…" {% if not backend_ok %}disabled{% endif %}></textarea>
+    <p class="hint">Runs transcription &rarr; cut planning &rarr; direction &rarr; scene audio slicing. Free — no credits spent.</p>
+    <p><input type="submit" class="primary" value="Generate plan" {% if not backend_ok %}disabled{% endif %}></p>
+  </form>
+  {% endif %}
+</div>
+{% endif %}
+
+{% if active_stage == "review" %}
+<div class="panel">
+  <h2>03 — Review</h2>
+  {% if lane != "cloud" %}
+  <h3>Import BYO clips</h3>
+  <form method="post" action="/project/{{ project.id }}/jobs/import" enctype="multipart/form-data">
+    <label class="field" for="clips">Clip zip (<span class="mono">scene_00.mp4 … scene_NN.mp4</span>)</label>
+    <input type="file" id="clips" name="clips" accept=".zip,application/zip" required {% if not backend_ok %}disabled{% endif %}>
+    <p><input type="submit" class="primary" value="Upload &amp; register takes" {% if not backend_ok %}disabled{% endif %}></p>
+    <p class="hint">Each valid clip is registered as a take with bytes + SHA-256. Free — generated on your own account. Then review, select winners, and assemble.</p>
+  </form>
+  <hr class="divider">
+  {% endif %}
+  {% if not scenes_with_takes %}
+  <p class="subtle">No takes yet. Approve a quote in <a href="/project/{{ project.id }}?stage=direct">Direct</a> to generate the first scene — or generate on your own account and import the clips above.</p>
+  {% else %}
+  {% for sc in scenes_with_takes %}
+  <h3>Scene <span class="mono">{{ sc.n }}</span> <span class="ts subtle">{{ sc.start }} &rarr; {{ sc.end }}</span></h3>
+  <div class="takes">
+    {% for t in sc.takes %}
+    <div class="card take {% if t.selected %}selected{% endif %}">
+      {% if t.video_url %}
+      <video controls preload="metadata" src="{{ t.video_url }}" playsinline></video>
+      {% else %}
+      <div class="subtle" style="aspect-ratio:16/9;display:flex;align-items:center;justify-content:center;background:#000;border-radius:8px">Take asset — preview unavailable</div>
+      {% endif %}
+      <div class="meta mono">{{ t.take_id }}</div>
+      <div class="meta mono">{{ t.sha_short }}</div>
+      <div class="meta">{{ t.status }}</div>
+      {% if t.selected %}<div class="winner">&#9733; Selected take</div>{% endif %}
+      <div class="actions">
+        {% if not t.selected %}
+        <form method="post" action="/project/{{ project.id }}/select">
+          <input type="hidden" name="scene_id" value="{{ sc.id }}">
+          <input type="hidden" name="take_id" value="{{ t.take_id }}">
+          <button type="submit" class="primary">Select</button>
+        </form>
+        {% endif %}
+        <form method="post" action="/project/{{ project.id }}/reroll"
+              onsubmit="return confirm('Reroll is a NEW PAID JOB — a fresh quote and generation will be charged. Continue?');">
+          <input type="hidden" name="scene_id" value="{{ sc.id }}">
+          <button type="submit" class="danger">Reroll</button>
+        </form>
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+  <hr class="divider">
+  {% endfor %}
+  <h3>Review checklist</h3>
+  <ul class="checklist">
+    <li><span class="tick">&#10003;</span><span><strong>Identity</strong> — every character matches the bible identity locks exactly.</span></li>
+    <li><span class="tick">&#10003;</span><span><strong>Continuity</strong> — wardrobe, setting and props continuous with the previous scene.</span></li>
+    <li><span class="tick">&#10003;</span><span><strong>Anatomy</strong> — hands, faces and bodies clean; no warping or extra limbs.</span></li>
+    <li><span class="tick">&#10003;</span><span><strong>No stray text/logos</strong> — no gibberish text, watermarks or brand marks in frame.</span></li>
+  </ul>
+  {% endif %}
+</div>
+{% endif %}
+
+{% if active_stage == "export" %}
+<div class="panel">
+  <h2>04 — Export</h2>
+  {% if master %}
+  <video class="master" controls preload="metadata" src="{{ master.url }}" playsinline></video>
+  <dl class="kv" style="margin-top:16px">
+    <dt>Bytes</dt><dd class="mono">{{ master.bytes }}</dd>
+    <dt>SHA-256</dt><dd class="mono">{{ master.sha256 }}</dd>
+  </dl>
+  <p><a class="btn primary" href="{{ master.url }}" download>Download master</a></p>
+  {% else %}
+  <p class="subtle">Assembly trims every selected take to its exact scene range and concatenates them under the unshifted master. Assembly is free.</p>
+  <form method="post" action="/project/{{ project.id }}/assemble">
+    <button type="submit" class="primary" {% if not backend_ok or not ready_to_assemble %}disabled{% endif %}>Assemble master</button>
+  </form>
+  {% if not ready_to_assemble %}<p class="hint">Every scene needs a selected take before assembly.</p>{% endif %}
+  {% if assemble_status %}<p class="mono">{{ assemble_status }}</p>{% endif %}
+  {% endif %}
+</div>
+{% endif %}
+{% endblock %}

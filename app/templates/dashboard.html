@@ -1,0 +1,34 @@
+{% extends "base.html" %}
+{% block title %}Dashboard{% endblock %}
+{% block content %}
+<h1 class="hero-title">WAVE CINEMA</h1>
+<p class="subtle">AI-powered film studio. Song in, finished music video out.</p>
+
+<div class="panel">
+  <h2>Projects</h2>
+  {% if projects %}
+  <div class="grid cols-3">
+    {% for p in projects %}
+    <a class="card" href="/project/{{ p.id }}" style="text-decoration:none;color:inherit">
+      <h3>{{ p.name }}</h3>
+      <div class="meta mono">{{ p.id }}</div>
+      <div class="meta">Stage: {{ p.stage_label }}</div>
+    </a>
+    {% endfor %}
+  </div>
+  {% else %}
+  <p class="subtle">No projects yet. Start your first film below.</p>
+  {% endif %}
+</div>
+
+<div class="panel">
+  <h2>New project</h2>
+  <form method="post" action="/projects">
+    <label class="field" for="name">Project name</label>
+    <input type="text" id="name" name="name" placeholder="e.g. Midnight Drive — official video" required maxlength="120"
+      {% if not backend_ok %}disabled{% endif %}>
+    <p class="hint">One project per film. {% if not backend_ok %}Disabled until the backend lands.{% endif %}</p>
+    <p><input type="submit" class="primary" value="Create project" {% if not backend_ok %}disabled{% endif %}></p>
+  </form>
+</div>
+{% endblock %}

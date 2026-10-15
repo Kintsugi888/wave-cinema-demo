@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>{% block title %}Wave Cinema{% endblock %} — Wave Cinema</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@700&family=Inter:wght@400;600&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+<header class="topbar">
+  <a class="brand" href="/">
+    <img class="logo" src="/brand/logo.jpg" alt="Wave Cinema logo" onerror="this.style.display='none'">
+    <span class="wordmark">WAVE <b>CINEMA</b></span>
+  </a>
+  <div class="credits-pill" title="Credit balance (owner account)">
+    CREDITS&nbsp;<strong>{{ credits if credits is not none else "—" }}</strong>
+  </div>
+</header>
+<div class="wrap">
+  {% if backend_ok is defined and not backend_ok %}
+  <div class="banner info">
+    <h3>Backend wiring in progress</h3>
+    <p class="subtle">The <span class="mono">wavecinema.api</span> package is still being built. The studio shell below is live and on-brand; pipeline actions will activate automatically once the backend lands. No actions taken here spend anything.</p>
+  </div>
+  {% endif %}
+  {% if error %}
+  <div class="banner error" role="alert">
+    <div class="tag">Error</div>
+    <p style="margin:8px 0 0">{{ error }}</p>
+  </div>
+  {% endif %}
+  {% block content %}{% endblock %}
+</div>
+</body>
+</html>
