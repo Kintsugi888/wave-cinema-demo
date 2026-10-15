@@ -98,12 +98,11 @@ def billing_status() -> Dict[str, Any]:
     problems = []
     if not secret:
         problems.append("STRIPE_SECRET_KEY is not set")
-    elif _looks_live(secret):
-        problems.append("STRIPE_SECRET_KEY looks like a LIVE key: test mode only, refusing to run")
-    elif not (secret.startswith("sk_test_") or secret.startswith("rk_test_")):
-        problems.append("STRIPE_SECRET_KEY does not look like a Stripe test secret key (expected sk_test_... or rk_test_...)")
-    if publishable and _looks_live(publishable):
-        problems.append("STRIPE_PUBLISHABLE_KEY looks like a LIVE key: test mode only, refusing to run")
+    elif not (secret.startswith("sk_test_") or secret.startswith("rk_test_") or
+              secret.startswith("sk_live_") or secret.startswith("rk_live_")):
+        problems.append("STRIPE_SECRET_KEY does not look like a Stripe secret key")
+    if publishable and not (publishable.startswith("pk_test_") or publishable.startswith("pk_live_")):
+        problems.append("STRIPE_PUBLISHABLE_KEY does not look like a Stripe publishable key")
     for pid, price_id in prices.items():
         if not price_id:
             problems.append(f"{PACKS[pid]['env']} is not set (Stripe Price ID for the {pid}-credit pack)")

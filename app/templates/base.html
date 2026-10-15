@@ -107,7 +107,7 @@
       <a href="/refunds">Refunds</a>
     </nav>
   </div>
-  <p class="subtle foot-note">Test mode: no real money moves here. Credits have no cash value and are non-transferable.</p>
+  <p class="subtle foot-note">{% if stripe_live %}Credits have no cash value and are non-transferable.{% else %}Test mode: no real money moves here. Credits have no cash value and are non-transferable.{% endif %}</p>
 </footer>
 
 <div id="radio" class="radio-widget" aria-label="Shamz Radio">

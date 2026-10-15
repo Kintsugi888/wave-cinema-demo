@@ -7,6 +7,7 @@ Backend calls go through backend_client (safe, degrading).
 
 import base64
 import json
+import os
 import uuid
 from pathlib import Path
 from typing import Any, Optional
@@ -203,6 +204,11 @@ def get_credits(user: Optional[dict] = None) -> Optional[int]:
         return None
 
 
+def _stripe_is_live() -> bool:
+    key = os.environ.get("STRIPE_SECRET_KEY", "")
+    return key.startswith("sk_live_") or key.startswith("rk_live_")
+
+
 def ctx(request: Optional[Request] = None,
         error: Optional[str] = None,
         nav_active: Optional[str] = None, **kw) -> dict:
@@ -216,6 +222,7 @@ def ctx(request: Optional[Request] = None,
         "rights_version": RIGHTS_VERSION,
         "rights_text": RIGHTS_TEXT,
         "user": user,
+        "stripe_live": _stripe_is_live(),
     }
     base.update(kw)
     return base
