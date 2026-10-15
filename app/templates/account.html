@@ -82,9 +82,8 @@
         <td class="mono">{{ t.created_at }}</td>
         <td class="mono">{{ t.last_used_at or "never" }}</td>
         <td>
-          <form method="post" action="/account/tokens/{{ t.id }}/revoke" style="display:inline"
-                onsubmit="return confirm('Revoke this token? Anything using it will stop working.')">
-            <button type="submit" class="btn danger-sm">Revoke</button>
+          <form method="post" action="/account/tokens/{{ t.id }}/revoke">
+            <button type="submit" class="btn danger-sm" onclick="return confirm('Revoke this token? Anything using it will stop working.')">Revoke</button>
           </form>
         </td>
       </tr>
