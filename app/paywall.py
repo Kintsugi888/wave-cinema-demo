@@ -347,8 +347,7 @@ def _not_configured_page(problems) -> str:
   <p>Credit packs can't be sold until Stripe test-mode credentials are in place.
   Nothing is broken. The server just needs its environment variables.</p>
   <ul>{items}</ul>
-  <p>See <span class="mono">app/paywall_config.md</span> for setup instructions
-  (test mode only. Live keys are refused).</p>
+  <p>See <span class="mono">app/paywall_config.md</span> for setup instructions.</p>
 </div>"""
     return _page("Billing: not configured", body)
 
