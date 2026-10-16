@@ -119,9 +119,8 @@
       <img src="{{ c.image_url }}" alt="{{ c.name }}" style="width:100%;aspect-ratio:1;object-fit:cover;border-radius:8px">
       <div class="meta"><strong>{{ c.name }}</strong></div>
       <div class="actions">
-        <form method="post" action="/project/{{ project.id }}/characters/{{ c.character_id }}/delete"
-              onsubmit="return confirm('Remove {{ c.name }} from the cast?');">
-          <button type="submit" class="danger">Remove</button>
+        <form method="post" action="/project/{{ project.id }}/characters/{{ c.character_id }}/delete">
+          <button type="submit" class="danger" onclick="return confirm('Remove {{ c.name }} from the cast?');">Remove</button>
         </form>
       </div>
     </div>
@@ -150,9 +149,8 @@
       <img src="{{ b.image_url }}" alt="{{ b.name }}" style="width:100%;aspect-ratio:16/9;object-fit:cover;border-radius:8px">
       <div class="meta"><strong>{{ b.name }}</strong></div>
       <div class="actions">
-        <form method="post" action="/project/{{ project.id }}/backgrounds/{{ b.background_id }}/delete"
-              onsubmit="return confirm('Remove {{ b.name }}?');">
-          <button type="submit" class="danger">Remove</button>
+        <form method="post" action="/project/{{ project.id }}/backgrounds/{{ b.background_id }}/delete">
+          <button type="submit" class="danger" onclick="return confirm('Remove {{ b.name }}?');">Remove</button>
         </form>
       </div>
     </div>
