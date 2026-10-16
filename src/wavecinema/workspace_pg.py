@@ -66,6 +66,21 @@ def create_project_pg(name: str) -> str:
     return project_id
 
 
+def delete_project_pg(project_id: str) -> dict:
+    """Delete a project and all its data from Postgres."""
+    dbmod = _get_db()
+    s = dbmod.get_session()
+    try:
+        p = s.query(dbmod.Project).filter_by(id=project_id).first()
+        if not p:
+            raise ProjectNotFound(f"no such project: {project_id}")
+        s.delete(p)
+        s.commit()
+        return {"deleted": project_id}
+    finally:
+        s.close()
+
+
 class ProjectWorkspacePG:
     """Postgres-backed workspace handle with revision guards."""
 
@@ -131,4 +146,5 @@ class ProjectWorkspacePG:
 # api.py switches between the two based on DATABASE_URL.
 # ---------------------------------------------------------------------------
 create_project = create_project_pg
+delete_project = delete_project_pg
 ProjectWorkspace = ProjectWorkspacePG
