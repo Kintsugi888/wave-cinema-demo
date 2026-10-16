@@ -19,6 +19,21 @@ DATA_DIR = Path.home() / "workspace" / "wave-cinema" / "data"
 PROJECTS_DIR = DATA_DIR / "projects"
 
 
+# Postgres backend: when DATABASE_URL is set, delegate to workspace_pg
+# for durable storage. The interface (create_project, ProjectWorkspace)
+# remains identical.
+import os as _os
+if _os.environ.get("DATABASE_URL"):
+    try:
+        from .workspace_pg import create_project as create_project
+        from .workspace_pg import ProjectWorkspacePG as ProjectWorkspace
+        _USING_PG = True
+    except Exception:
+        _USING_PG = False
+else:
+    _USING_PG = False
+
+
 def _utcnow_iso() -> str:
     return datetime.now(timezone.utc).isoformat()
 
@@ -57,81 +72,83 @@ def _new_workspace(project_id: str, name: str) -> dict:
     }
 
 
-def create_project(name: str) -> str:
-    """Create a new project directory + workspace.json at revision 0."""
-    project_id = "wc_" + uuid.uuid4().hex[:12]
-    pdir = project_dir(project_id)
-    pdir.mkdir(parents=True, exist_ok=False)
-    (pdir / "takes").mkdir(exist_ok=True)
-    (pdir / "scenes").mkdir(exist_ok=True)
-    (pdir / "exports").mkdir(exist_ok=True)
-    ws = _new_workspace(project_id, name)
-    with open(workspace_path(project_id), "w", encoding="utf-8") as f:
-        json.dump(ws, f, indent=2)
-    return project_id
+if not _USING_PG:
+    # File-based backend (used when DATABASE_URL is not set)
+    def create_project(name: str) -> str:
+        """Create a new project directory + workspace.json at revision 0."""
+        project_id = "wc_" + uuid.uuid4().hex[:12]
+        pdir = project_dir(project_id)
+        pdir.mkdir(parents=True, exist_ok=False)
+        (pdir / "takes").mkdir(exist_ok=True)
+        (pdir / "scenes").mkdir(exist_ok=True)
+        (pdir / "exports").mkdir(exist_ok=True)
+        ws = _new_workspace(project_id, name)
+        with open(workspace_path(project_id), "w", encoding="utf-8") as f:
+            json.dump(ws, f, indent=2)
+        return project_id
 
 
-class ProjectWorkspace:
-    """Load-modify-save handle for one project's workspace.json.
+    class ProjectWorkspace:
+        """Load-modify-save handle for one project's workspace.json.
 
-    Typical use:
-        ws = ProjectWorkspace.load(project_id)
-        rev = ws.revision
-        ws.state["scenes"] = [...]
-        ws.save(expected_revision=rev)   # raises RevisionConflict if stale
-    """
-
-    def __init__(self, project_id: str, state: dict):
-        self.project_id = project_id
-        self.state = state
-
-    @property
-    def revision(self) -> int:
-        return int(self.state["revision"])
-
-    @classmethod
-    def load(cls, project_id: str) -> "ProjectWorkspace":
-        path = workspace_path(project_id)
-        if not path.exists():
-            raise ProjectNotFound(f"no such project: {project_id}")
-        with open(path, encoding="utf-8") as f:
-            state = json.load(f)
-        return cls(project_id, state)
-
-    def snapshot(self) -> dict:
-        """Deep copy of the current state (for callers that only read)."""
-        return copy.deepcopy(self.state)
-
-    def save(self, expected_revision: int) -> int:
-        """Persist state, guarding on the caller's expected revision.
-
-        Returns the new revision. Raises RevisionConflict without writing
-        anything when expected_revision != current revision.
+        Typical use:
+            ws = ProjectWorkspace.load(project_id)
+            rev = ws.revision
+            ws.state["scenes"] = [...]
+            ws.save(expected_revision=rev)   # raises RevisionConflict if stale
         """
-        path = workspace_path(self.project_id)
-        if not path.exists():
-            raise ProjectNotFound(f"no such project: {self.project_id}")
-        with open(path, encoding="utf-8") as f:
-            on_disk = json.load(f)
-        current = int(on_disk["revision"])
-        if int(expected_revision) != current:
-            raise RevisionConflict(
-                f"stale write rejected: expected_revision={expected_revision}, "
-                f"current revision={current} (project {self.project_id})"
-            )
-        new_rev = current + 1
-        self.state["revision"] = new_rev
-        self.state["updated_at"] = _utcnow_iso()
-        tmp = path.with_suffix(".json.tmp")
-        with open(tmp, "w", encoding="utf-8") as f:
-            json.dump(self.state, f, indent=2)
-        tmp.replace(path)
-        return new_rev
 
-    def log_event(self, message: str) -> None:
-        """Append a bounded human-readable event to the workspace log."""
-        log = self.state.setdefault("log", [])
-        log.append({"at": _utcnow_iso(), "message": message})
-        # keep the log bounded so workspace.json stays small
-        if len(log) > 500:
-            del log[: len(log) - 500]
+        def __init__(self, project_id: str, state: dict):
+            self.project_id = project_id
+            self.state = state
+
+        @property
+        def revision(self) -> int:
+            return int(self.state["revision"])
+
+        @classmethod
+        def load(cls, project_id: str) -> "ProjectWorkspace":
+            path = workspace_path(project_id)
+            if not path.exists():
+                raise ProjectNotFound(f"no such project: {project_id}")
+            with open(path, encoding="utf-8") as f:
+                state = json.load(f)
+            return cls(project_id, state)
+
+        def snapshot(self) -> dict:
+            """Deep copy of the current state (for callers that only read)."""
+            return copy.deepcopy(self.state)
+
+        def save(self, expected_revision: int) -> int:
+            """Persist state, guarding on the caller's expected revision.
+
+            Returns the new revision. Raises RevisionConflict without writing
+            anything when expected_revision != current revision.
+            """
+            path = workspace_path(self.project_id)
+            if not path.exists():
+                raise ProjectNotFound(f"no such project: {self.project_id}")
+            with open(path, encoding="utf-8") as f:
+                on_disk = json.load(f)
+            current = int(on_disk["revision"])
+            if int(expected_revision) != current:
+                raise RevisionConflict(
+                    f"stale write rejected: expected_revision={expected_revision}, "
+                    f"current revision={current} (project {self.project_id})"
+                )
+            new_rev = current + 1
+            self.state["revision"] = new_rev
+            self.state["updated_at"] = _utcnow_iso()
+            tmp = path.with_suffix(".json.tmp")
+            with open(tmp, "w", encoding="utf-8") as f:
+                json.dump(self.state, f, indent=2)
+            tmp.replace(path)
+            return new_rev
+
+        def log_event(self, message: str) -> None:
+            """Append a bounded human-readable event to the workspace log."""
+            log = self.state.setdefault("log", [])
+            log.append({"at": _utcnow_iso(), "message": message})
+            # keep the log bounded so workspace.json stays small
+            if len(log) > 500:
+                del log[: len(log) - 500]
