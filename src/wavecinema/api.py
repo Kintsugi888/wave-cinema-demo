@@ -17,6 +17,7 @@ Money-moving behaviour:
 """
 from __future__ import annotations
 
+import os
 from datetime import datetime, timezone
 
 from . import assemble as _assemble
@@ -42,7 +43,12 @@ from . import render_opts as _render_opts
 from . import slice as _slice
 from . import takes as _takes
 from . import transcribe as _transcribe
-from . import workspace as _workspace
+# Use Postgres-backed workspace when DATABASE_URL is set (production);
+# fall back to JSON file workspace for local dev.
+if os.environ.get("DATABASE_URL"):
+    from . import workspace_pg as _workspace
+else:
+    from . import workspace as _workspace
 from .errors import (
     NoApprovedQuote,
     QuoteExpired,
