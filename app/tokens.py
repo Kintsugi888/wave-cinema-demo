@@ -24,6 +24,19 @@ TOKEN_PREFIX = "wc_"
 
 
 def _load_tokens() -> list:
+    import store as storemod
+    if storemod.USE_DB:
+        # DB-backed: fetch via store adapter
+        from db import ApiToken as DBToken
+        s = storemod.get_session()
+        try:
+            return [{"id": t.id, "user_id": t.user_id, "name": t.name,
+                     "token_hash": t.token_hash,
+                     "created_at": int(t.created_at.timestamp()) if t.created_at else 0,
+                     "last_used_at": int(t.last_used_at.timestamp()) if t.last_used_at else None}
+                    for t in s.query(DBToken).filter_by(revoked=0).all()]
+        finally:
+            s.close()
     try:
         data = json.loads(TOKENS_FILE.read_text())
         return data if isinstance(data, list) else []
@@ -32,6 +45,24 @@ def _load_tokens() -> list:
 
 
 def _save_tokens(tokens: list) -> None:
+    import store as storemod
+    if storemod.USE_DB:
+        # DB-backed: sync via store adapter (used for last_used_at touches)
+        from db import ApiToken as DBToken
+        s = storemod.get_session()
+        try:
+            for t in tokens:
+                if not isinstance(t, dict) or not t.get("id"):
+                    continue
+                rec = s.query(DBToken).filter_by(id=t["id"]).first()
+                if rec and "last_used_at" in t and t["last_used_at"]:
+                    from datetime import datetime, timezone
+                    rec.last_used_at = datetime.fromtimestamp(
+                        t["last_used_at"], tz=timezone.utc)
+            s.commit()
+        finally:
+            s.close()
+        return
     DATA_DIR.mkdir(parents=True, exist_ok=True)
     TOKENS_FILE.write_text(json.dumps(tokens, indent=2))
 

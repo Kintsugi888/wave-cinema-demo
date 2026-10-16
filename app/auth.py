@@ -51,6 +51,25 @@ def _serializer(salt: str) -> URLSafeTimedSerializer:
 
 def _load_users() -> list:
     try:
+        from store import USE_DB
+    except ImportError:
+        from .store import USE_DB
+    if USE_DB:
+        # DB-backed: return all users as dicts
+        try:
+            from store import get_session
+            from db import User as DBUser
+        except ImportError:
+            from .store import get_session
+            from .db import User as DBUser
+        s = get_session()
+        try:
+            return [{"id": u.id, "email": u.email, "name": u.name,
+                     "credits": u.credits, "byok_keys": u.byok_keys}
+                    for u in s.query(DBUser).all()]
+        finally:
+            s.close()
+    try:
         data = json.loads(USERS_FILE.read_text())
         return data if isinstance(data, list) else []
     except Exception:
@@ -58,6 +77,19 @@ def _load_users() -> list:
 
 
 def _save_users(users: list) -> None:
+    try:
+        from store import USE_DB
+    except ImportError:
+        from .store import USE_DB
+    if USE_DB:
+        try:
+            from store import save_user
+        except ImportError:
+            from .store import save_user
+        for u in users:
+            if isinstance(u, dict) and u.get("id"):
+                save_user(u)
+        return
     DATA_DIR.mkdir(parents=True, exist_ok=True)
     USERS_FILE.write_text(json.dumps(users, indent=2))
 

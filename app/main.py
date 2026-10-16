@@ -175,32 +175,29 @@ def _save_json(path: Path, data: Any) -> None:
 
 
 def registry_list(user_id: Optional[str] = None) -> list:
-    items = _load_json(REGISTRY, [])
-    if not isinstance(items, list):
-        return []
-    if user_id:
-        items = [i for i in items
-                 if i.get("owner_id") == user_id or "owner_id" not in i]
-    return items
+    import store as storemod
+    return storemod.registry_list(user_id)
 
 
 def registry_add(pid: str, name: str, user_id: Optional[str] = None) -> None:
-    items = [i for i in _load_json(REGISTRY, []) if isinstance(i, dict)
-             and i.get("id") != pid]
-    entry = {"id": pid, "name": name}
-    if user_id:
-        entry["owner_id"] = user_id
-    items.append(entry)
-    _save_json(REGISTRY, items)
+    import store as storemod
+    return storemod.registry_add(pid, name, user_id)
 
 
 def pending_quotes() -> dict:
-    q = _load_json(QUOTES, {})
-    return q if isinstance(q, dict) else {}
+    import store as storemod
+    return storemod.quotes_load()
 
 
 def save_pending_quotes(q: dict) -> None:
+    import store as storemod
+    # Save each project's quotes individually for DB backend
+    if storemod.USE_DB:
+        for pid, data in q.items():
+            storemod.quotes_save(pid, data if isinstance(data, dict) else {})
+        return
     _save_json(QUOTES, q)
+
 
 
 def get_credits(user: Optional[dict] = None) -> Optional[int]:
