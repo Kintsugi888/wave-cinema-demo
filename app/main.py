@@ -672,6 +672,18 @@ def _check_owner(pid: str, p: dict, user: dict) -> Optional[str]:
     return None
 
 
+def _require_project_owner(request: Request, pid: str):
+    """Get user, project, and verify ownership. Returns (user, project) or raises _LoginRequired."""
+    user = require_user(request)
+    ok, p, perr = project_of(pid)
+    if not ok:
+        raise _LoginRequired()
+    owner_err = _check_owner(pid, p, user)
+    if owner_err:
+        raise _LoginRequired()
+    return user, p
+
+
 @app.get("/project/{pid}", response_class=HTMLResponse)
 def project_page(request: Request,
                  pid: str,
@@ -737,7 +749,9 @@ def project_page(request: Request,
 
 
 @app.post("/project/{pid}/ingest")
-async def ingest(pid: str, song: UploadFile = File(...), assent: Optional[str] = Form(None)):
+async def ingest(request: Request, pid: str, song: UploadFile = File(...), assent: Optional[str] = Form(None)):
+    _require_project_owner(request, pid)
+    _require_project_owner(request, pid)
     if assent != "yes":
         return RedirectResponse(
             f"/project/{pid}?stage=ingest&err={_q('Tick the rights box first: we can’t touch your song without it.')}",
@@ -760,7 +774,9 @@ async def ingest(pid: str, song: UploadFile = File(...), assent: Optional[str] =
 
 
 @app.post("/project/{pid}/direct")
-def direct(pid: str, treatment: str = Form("")):
+def direct(request: Request, pid: str, treatment: str = Form("")):
+    _require_project_owner(request, pid)
+    _require_project_owner(request, pid)
     steps = [
         ("transcribe", lambda: backend.transcribe(pid)),
         ("plan_cuts", lambda: backend.plan_cuts(pid)),
@@ -777,7 +793,8 @@ def direct(pid: str, treatment: str = Form("")):
 
 
 @app.post("/project/{pid}/quote")
-def quote(pid: str, scene_id: str = Form(...)):
+def quote(request: Request, pid: str, scene_id: str = Form(...)):
+    _require_project_owner(request, pid)
     ok, res = bcall(backend.quote_scene, pid, scene_id)
     if not ok or not isinstance(res, dict):
         return RedirectResponse(
@@ -790,7 +807,8 @@ def quote(pid: str, scene_id: str = Form(...)):
 
 
 @app.post("/project/{pid}/approve")
-def approve(pid: str, quote_id: str = Form(...), scene_id: str = Form(...)):
+def approve(request: Request, pid: str, quote_id: str = Form(...), scene_id: str = Form(...)):
+    _require_project_owner(request, pid)
     q = pending_quotes().get(pid, {}).get(str(scene_id))
     if not q or str(_g(q, "quote_id", "id", default="")) != str(quote_id):
         return RedirectResponse(
@@ -812,7 +830,8 @@ def approve(pid: str, quote_id: str = Form(...), scene_id: str = Form(...)):
 
 
 @app.post("/project/{pid}/select")
-def select(pid: str, scene_id: str = Form(...), take_id: str = Form(...)):
+def select(request: Request, pid: str, scene_id: str = Form(...), take_id: str = Form(...)):
+    _require_project_owner(request, pid)
     ok, res = bcall(backend.select_take, pid, scene_id, take_id)
     if not ok:
         return RedirectResponse(f"/project/{pid}?stage=review&err={_q(res)}", status_code=303)
@@ -820,7 +839,8 @@ def select(pid: str, scene_id: str = Form(...), take_id: str = Form(...)):
 
 
 @app.post("/project/{pid}/reroll")
-def reroll(pid: str, scene_id: str = Form(...)):
+def reroll(request: Request, pid: str, scene_id: str = Form(...)):
+    _require_project_owner(request, pid)
     key = uuid.uuid4().hex
     ok, res = bcall(backend.reroll_scene, pid, scene_id, key)
     if not ok:
@@ -829,7 +849,8 @@ def reroll(pid: str, scene_id: str = Form(...)):
 
 
 @app.post("/project/{pid}/assemble")
-def assemble(pid: str):
+def assemble(request: Request, pid: str):
+    _require_project_owner(request, pid)
     ok, res = bcall(backend.assemble, pid)
     if not ok:
         return RedirectResponse(f"/project/{pid}?stage=export&err={_q(res)}", status_code=303)
@@ -838,7 +859,9 @@ def assemble(pid: str):
 
 
 @app.post("/project/{pid}/lane")
-def set_lane(pid: str, lane: str = Form(...)):
+def set_lane(request: Request, pid: str, lane: str = Form(...)):
+    _require_project_owner(request, pid)
+    _require_project_owner(request, pid)
     ok, res = bcall(backend.set_provider_lane, pid, lane)
     if not ok:
         return RedirectResponse(f"/project/{pid}?err={_q(res)}", status_code=303)
