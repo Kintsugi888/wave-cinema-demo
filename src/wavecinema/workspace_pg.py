@@ -21,15 +21,34 @@ _USE_PG = bool(os.environ.get("DATABASE_URL"))
 
 
 def _get_db():
-    """Import the UI's db module (available when deployed together)."""
+    """Import the UI's db module.
+
+    Tries direct import first (works when app/ is on sys.path, which it
+    is when running via main.py). Falls back to path search for
+    standalone backend usage.
+    """
     import sys
+    try:
+        import db as dbmod
+        return dbmod
+    except ImportError:
+        pass
     from pathlib import Path
-    # The UI app lives at ~/workspace/wave-cinema/deploy/hf-space/app
-    app_dir = Path(__file__).resolve().parent.parent.parent / "deploy" / "hf-space" / "app"
-    if str(app_dir) not in sys.path:
-        sys.path.insert(0, str(app_dir))
-    import db as dbmod
-    return dbmod
+    # Candidate locations for the app directory
+    here = Path(__file__).resolve()
+    candidates = [
+        # Render: /opt/render/project/src/app
+        here.parent.parent.parent / "app",
+        # Local dev: ~/workspace/wave-cinema/deploy/hf-space/app
+        here.parent.parent.parent / "deploy" / "hf-space" / "app",
+    ]
+    for app_dir in candidates:
+        if (app_dir / "db.py").exists():
+            if str(app_dir) not in sys.path:
+                sys.path.insert(0, str(app_dir))
+            import db as dbmod
+            return dbmod
+    raise ImportError("Could not locate app/db.py for Postgres backend")
 
 
 def create_project_pg(name: str) -> str:
