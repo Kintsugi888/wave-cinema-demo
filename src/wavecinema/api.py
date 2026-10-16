@@ -180,6 +180,11 @@ def get_project(project_id: str) -> dict:
     return _workspace.ProjectWorkspace.load(project_id).snapshot()
 
 
+def delete_project(project_id: str) -> dict:
+    """Delete a project and all its data. Returns {"deleted": project_id}."""
+    return _workspace.delete_project(project_id)
+
+
 # ---------------------------------------------------------------- ingest
 
 def ingest_song(project_id: str, file_bytes: bytes, filename: str,
