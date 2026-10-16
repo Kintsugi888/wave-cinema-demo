@@ -949,6 +949,27 @@ async def character_add(pid: str, name: str = Form(...),
         status_code=303)
 
 
+@app.post("/project/{pid}/delete")
+def project_delete(request: Request, pid: str):
+    # Ownership check: only the project owner can delete
+    try:
+        _require_project_owner(request, pid)
+    except _LoginRequired:
+        return RedirectResponse("/login", status_code=303)
+    # Delete workspace data via backend
+    ok, res = bcall(backend.delete_project, pid)
+    if not ok:
+        return RedirectResponse(
+            f"/?err={_q(res)}", status_code=303)
+    # Remove from registry
+    try:
+        import store as storemod
+        storemod.registry_remove(pid)
+    except Exception:
+        pass
+    return RedirectResponse("/", status_code=303)
+
+
 @app.post("/project/{pid}/characters/{cid}/delete")
 def character_delete(request: Request, pid: str, cid: str):
     require_user(request)
