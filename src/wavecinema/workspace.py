@@ -87,6 +87,16 @@ if not _USING_PG:
             json.dump(ws, f, indent=2)
         return project_id
 
+    def delete_project(project_id: str) -> dict:
+        """Delete a project's directory and all its files."""
+        import shutil
+        pdir = project_dir(project_id)
+        if not pdir.exists():
+            from .errors import ProjectNotFound
+            raise ProjectNotFound(f"no such project: {project_id}")
+        shutil.rmtree(pdir)
+        return {"deleted": project_id}
+
 
     class ProjectWorkspace:
         """Load-modify-save handle for one project's workspace.json.
