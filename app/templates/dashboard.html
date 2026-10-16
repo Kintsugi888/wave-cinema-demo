@@ -16,11 +16,17 @@
   {% if projects %}
   <div class="grid cols-3">
     {% for p in projects %}
-    <a class="card" href="/project/{{ p.id }}" style="text-decoration:none;color:inherit">
-      <h3>{{ p.name }}</h3>
-      <div class="meta mono">{{ p.id }}</div>
-      <div class="meta">Stage: {{ p.stage_label }}</div>
-    </a>
+    <div class="card" style="position:relative">
+      <a href="/project/{{ p.id }}" style="text-decoration:none;color:inherit;display:block">
+        <h3>{{ p.name }}</h3>
+        <div class="meta mono">{{ p.id }}</div>
+        <div class="meta">Stage: {{ p.stage_label }}</div>
+      </a>
+      <form method="post" action="/project/{{ p.id }}/delete" style="margin-top:8px"
+            onsubmit="return confirm('Delete &quot;{{ p.name }}&quot;? This cannot be undone.')">
+        <button type="submit" class="btn-danger">Delete project</button>
+      </form>
+    </div>
     {% endfor %}
   </div>
   {% else %}
