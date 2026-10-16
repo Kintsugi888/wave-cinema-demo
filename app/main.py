@@ -50,6 +50,13 @@ app = FastAPI(title="Wave Cinema", docs_url=None, redoc_url=None)
 app.mount("/static", StaticFiles(directory=str(APP_DIR / "static")), name="static")
 templates = Jinja2Templates(directory=str(APP_DIR / "templates"))
 
+# Initialize Postgres tables on startup (no-op if DATABASE_URL not set)
+try:
+    import db as dbmod
+    dbmod.init_db()
+except Exception:
+    pass
+
 backend = Backend()
 
 STAGES = [
