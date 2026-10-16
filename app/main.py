@@ -89,9 +89,17 @@ class _LoginRequired(Exception):
 @app.middleware("http")
 async def auth_middleware(request: Request, call_next):
     path = request.url.path
-    is_api = path.startswith("/api/v1/") or path == "/mcp" or path.startswith("/mcp")
+    is_api = path.startswith("/api/v1/")
     is_public = path in PUBLIC_PATHS or any(
-        path.startswith(p) for p in PUBLIC_PATHS if p.endswith("/"))
+        # NOTE: "/" is exact-match only (len(p) > 1): without the length
+        # guard every path startswith "/" and the login gate below would
+        # never fire, silently leaving all non-public routes unprotected.
+        path.startswith(p) for p in PUBLIC_PATHS if p.endswith("/") and len(p) > 1)
+    if path == "/mcp" or path.startswith("/mcp"):
+        # MCP does its own per-method auth (public info/initialize,
+        # bearer-token tools returning JSON-RPC -32001 when unauthenticated);
+        # the HTTP layer must let requests through, not 401/redirect them.
+        is_public = True
     # /billing page itself is public (shows packs); checkout requires login.
     if path == "/billing" or path.startswith("/billing/"):
         is_public = path in ("/billing", "/billing/success")
@@ -99,7 +107,11 @@ async def auth_middleware(request: Request, call_next):
         is_public = True
     if path == "/api/docs":
         is_public = True
-    if not is_public and not get_current_user(request):
+    # Bearer-token API clients carry no session cookie; let them through to the
+    # per-route bearer verification (api_v1), otherwise a valid API token would
+    # be 401'd here before its route ever ran.
+    has_bearer = request.headers.get("authorization", "").lower().startswith("bearer ")
+    if not is_public and not get_current_user(request) and not has_bearer:
         if is_api:
             # API clients get JSON 401s, never a login redirect.
             # (Bearer-token auth happens per-route; this is the no-session case.)
@@ -911,7 +923,8 @@ async def character_add(pid: str, name: str = Form(...),
 
 
 @app.post("/project/{pid}/characters/{cid}/delete")
-def character_delete(pid: str, cid: str):
+def character_delete(request: Request, pid: str, cid: str):
+    require_user(request)
     ok, res = bcall(backend.remove_character, pid, cid)
     if not ok:
         return RedirectResponse(
@@ -920,7 +933,8 @@ def character_delete(pid: str, cid: str):
 
 
 @app.get("/project/{pid}/characters/{cid}/image")
-def character_image(pid: str, cid: str):
+def character_image(request: Request, pid: str, cid: str):
+    require_user(request)
     ok, res = bcall(backend.character_image_path, pid, cid)
     if not ok:
         return RedirectResponse(f"/project/{pid}?stage=direct", status_code=303)
