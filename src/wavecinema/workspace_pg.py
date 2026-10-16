@@ -15,7 +15,7 @@ import os
 import uuid
 
 from .errors import ProjectNotFound, RevisionConflict
-from .workspace import _new_workspace, _utcnow_iso
+from .workspace import _new_workspace, _utcnow_iso, DATA_DIR
 
 _USE_PG = bool(os.environ.get("DATABASE_URL"))
 
@@ -94,6 +94,14 @@ class ProjectWorkspacePG:
     def snapshot(self) -> dict:
         return copy.deepcopy(self.state)
 
+    def log_event(self, message: str) -> None:
+        """Append a bounded human-readable event to the workspace log."""
+        log = self.state.setdefault("log", [])
+        log.append({"at": _utcnow_iso(), "message": message})
+        # keep the log bounded so workspace JSONB stays small
+        if len(log) > 500:
+            del log[: len(log) - 500]
+
     def save(self, expected_revision: int) -> int:
         dbmod = _get_db()
         s = dbmod.get_session()
@@ -116,3 +124,11 @@ class ProjectWorkspacePG:
             return new_rev
         finally:
             s.close()
+
+
+# ---------------------------------------------------------------------------
+# Interface aliases so this module is a drop-in replacement for workspace.py.
+# api.py switches between the two based on DATABASE_URL.
+# ---------------------------------------------------------------------------
+create_project = create_project_pg
+ProjectWorkspace = ProjectWorkspacePG
