@@ -956,9 +956,12 @@ def project_delete(request: Request, pid: str):
         _require_project_owner(request, pid)
     except _LoginRequired:
         return RedirectResponse("/login", status_code=303)
-    # Delete workspace data via backend
+    # Delete workspace data via backend.
+    # Tolerate "not found": pre-Postgres projects may have a registry
+    # entry but no workspace row (their JSON files were ephemeral).
     ok, res = bcall(backend.delete_project, pid)
-    if not ok:
+    if not ok and "no such project" not in str(res).lower() \
+            and "not found" not in str(res).lower():
         return RedirectResponse(
             f"/?err={_q(res)}", status_code=303)
     # Remove from registry
