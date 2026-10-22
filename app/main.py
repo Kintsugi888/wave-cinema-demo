@@ -681,7 +681,18 @@ def _require_project_owner(request: Request, pid: str):
     user = require_user(request)
     ok, p, perr = project_of(pid)
     if not ok:
-        raise _LoginRequired()
+        # Fall back to registry for pre-Postgres projects that have a
+        # registry entry but no workspace row (ephemeral JSON was wiped).
+        p = None
+        try:
+            for item in registry_list(user["id"]):
+                if item.get("id") == pid:
+                    p = dict(item)
+                    break
+        except Exception:
+            pass
+        if p is None:
+            raise _LoginRequired()
     owner_err = _check_owner(pid, p, user)
     if owner_err:
         raise _LoginRequired()
